@@ -3481,7 +3481,7 @@ function sendInvoiceWhatsApp(invoice){
   const phone = p ? p.phone : '';
   if(!phone){ showToast('No phone number on file for this patient'); return; }
   const balance = invoiceBalance(invoice);
-  const msg = fillTemplate(DATA.settings.waInvoiceTemplate, {
+  let msg = fillTemplate(DATA.settings.waInvoiceTemplate, {
     name: p ? p.name : (invoice.patientName||'Patient'),
     clinic: DATA.settings.clinicName || 'us',
     invoiceId: invoice.id,
@@ -3490,6 +3490,11 @@ function sendInvoiceWhatsApp(invoice){
     balance: fmtINR(balance),
     status: invoice.status || ''
   });
+  const pkg = (p && invoice.packageId) ? (p.packages||[]).find(pk=>pk.id===invoice.packageId) : null;
+  if(pkg){
+    const total = Number(pkg.totalSessions)||0, used = Number(pkg.usedSessions)||0;
+    msg += '\n\nPackage: '+pkg.label+'\nSessions used: '+used+' of '+total+'\nSessions remaining: '+(total-used);
+  }
   openWa(phone, msg);
 }
 function printInvoice(invoice){
@@ -3498,6 +3503,7 @@ function printInvoice(invoice){
   const type = DATA.apptTypes.find(t=>t.id===invoice.typeId);
   const balance = invoiceBalance(invoice);
   const patientName = p ? p.name : (invoice.patientName || '—');
+  const pkg = (p && invoice.packageId) ? (p.packages||[]).find(pk=>pk.id===invoice.packageId) : null;
   const rows = [
     ['Invoice ID', invoice.id],
     ['Date', fmtDateShort(invoice.date)],
@@ -3510,6 +3516,12 @@ function printInvoice(invoice){
     ['Balance Due', fmtINR(balance)],
     ['Status', invoice.status || '—'],
   ];
+  if(pkg){
+    const total = Number(pkg.totalSessions)||0, used = Number(pkg.usedSessions)||0;
+    rows.push(['Package', pkg.label]);
+    rows.push(['Sessions Used', used+' of '+total]);
+    rows.push(['Sessions Remaining', String(total-used)]);
+  }
   if(invoice.notes) rows.push(['Notes', invoice.notes]);
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${escapeHtml(invoice.id)}</title>
   <style>
