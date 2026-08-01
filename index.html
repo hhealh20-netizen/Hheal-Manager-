@@ -1805,9 +1805,9 @@ function renderPatientDetail(){
         ${invoices.map(inv=>{
           const bal = invoiceBalance(inv);
           const pkg = inv.packageId ? (p.packages||[]).find(pk=>pk.id===inv.packageId) : null;
-          const balCell = pkg
-            ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left'
-            : (bal>0?fmtINR(bal):'—');
+          const pkgPart = pkg ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left' : '';
+          const balPart = bal>0 ? fmtINR(bal) : '';
+          const balCell = (pkgPart && balPart) ? (pkgPart+' &middot; '+balPart) : (pkgPart || balPart || '—');
           const amtCell = inv.complimentary ? '₹0 (comp.)' : fmtINR(inv.amount);
           return '<tr data-invid="'+inv.id+'"><td>'+fmtDateShort(inv.date)+'</td><td>'+escapeHtml(inv.id)+'</td><td>'+fmtINR(inv.sessionCost)+'</td><td>'+amtCell+'</td><td style="font-size:12px;">'+(inv.paymentMethod?escapeHtml(inv.paymentMethod):'—')+'</td><td>'+balCell+'</td><td><span class="status-tag status-'+inv.status+'">'+inv.status+'</span></td></tr>';
         }).join('')}
@@ -4012,9 +4012,9 @@ function renderBilling(){
     const apptLabel = appt ? (fmtDateShort(appt.date)+' &middot; '+(apptType?escapeHtml(apptType.name):'')) : '—';
     const pkg = (p && inv.packageId) ? (p.packages||[]).find(pk=>pk.id===inv.packageId) : null;
     const bal = invoiceBalance(inv);
-    const balCell = pkg
-      ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left'
-      : (bal>0 ? fmtINR(bal) : '—');
+    const pkgPart = pkg ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left' : '';
+    const balPart = bal>0 ? fmtINR(bal) : '';
+    const balCell = (pkgPart && balPart) ? (pkgPart+' &middot; '+balPart) : (pkgPart || balPart || '—');
     const amountCell = inv.complimentary
       ? '<span style="color:var(--ink-soft);">₹0 <span style="font-size:11px;">(comp.)</span></span>'
       : fmtINR(inv.amount);
