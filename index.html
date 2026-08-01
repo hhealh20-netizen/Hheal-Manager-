@@ -254,9 +254,9 @@
 
 
   <nav class="rail">
-    <div class="rail-brand">
-      <svg width="30" height="30" viewBox="0 0 30 30" fill="none"><path d="M15 3C10 9 5 13 5 19a10 10 0 0020 0c0-6-5-10-10-16z" fill="#EAF6F5" opacity="0.9"/><path d="M15 3C10 9 5 13 5 19a10 10 0 0020 0c0-6-5-10-10-16z" stroke="#0B6E71" stroke-width="0"/></svg>
-      <div>
+    <div class="rail-brand" style="flex-direction:column; align-items:flex-start; gap:2px;">
+      <img id="app-logo-img" alt="Clinic logo" style="max-width:150px; height:auto; display:block;">
+      <div style="display:none;">
         <div class="name">Hheal Manager</div>
         <div class="sub">Patients &amp; Scheduling</div>
       </div>
@@ -438,7 +438,9 @@
           <div class="field"><label>Appointment reminder template</label><textarea id="set-wa-reminder" style="min-height:70px;"></textarea></div>
           <div class="hint" style="margin-bottom:12px;">Placeholders: {name} {date} {time} {doctor} {clinic}</div>
           <div class="field"><label>Birthday wish template</label><textarea id="set-wa-birthday" style="min-height:60px;"></textarea></div>
-          <div class="hint">Placeholders: {name} {clinic}</div>
+          <div class="hint" style="margin-bottom:12px;">Placeholders: {name} {clinic} — used for patients, doctors, and team members alike (Dashboard shows all three together each day).</div>
+          <div class="field"><label>Invoice summary template</label><textarea id="set-wa-invoice" style="min-height:80px;"></textarea></div>
+          <div class="hint">Placeholders: {name} {clinic} {invoiceId} {date} {amount} {balance} {status} — sent from the "WhatsApp" button on any saved invoice.</div>
         </div>
         <div class="card settings-card">
           <h3>Clinic name</h3>
@@ -598,6 +600,15 @@
           <div id="fin-billing-by-method" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         </div>
         <div class="card" style="padding:16px 18px;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-sm" id="fin-inv-preset-today">Today</button>
+              <button class="btn btn-ghost btn-sm" id="fin-inv-preset-week">This Week</button>
+              <button class="btn btn-ghost btn-sm" id="fin-inv-preset-month">This Month</button>
+              <button class="btn btn-ghost btn-sm" id="fin-inv-preset-all">All Time</button>
+            </div>
+            <span id="fin-inv-today-count" style="font-size:12.5px; color:var(--ink-soft); margin-left:auto;"></span>
+          </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:14px;">
             <div class="field" style="margin-bottom:0;"><label>From</label><input type="date" id="fin-inv-from"></div>
             <div class="field" style="margin-bottom:0;"><label>To</label><input type="date" id="fin-inv-to"></div>
@@ -838,6 +849,7 @@ let DATA = {
   settings: { startTime:'07:00', endTime:'19:00', interval:15, defaultDuration:30, clinicName:'Hheal Manager', syncUrl:'', autoExportFreq:'off', lastAutoExport:'', autoExportEveryNChanges:0, appPin:'', ownerPin:'', doctorPayoutsSalt:'', syncSecret:'', preventDoubleBooking:false, lastSyncStamp:'',
     waReminderTemplate:'Hi {name}, this is a reminder from {clinic} for your appointment on {date} at {time} with {doctor}. Reply to this message if you need to reschedule. See you soon!',
     waBirthdayTemplate:'Happy Birthday, {name}! 🎉 Wishing you a wonderful year ahead, from all of us at {clinic}.',
+    waInvoiceTemplate:'Hi {name}, here is your invoice summary from {clinic}.\nInvoice: {invoiceId}\nDate: {date}\nAmount: {amount}\nBalance Due: {balance}\nStatus: {status}\nThank you!',
     patientSeq: 0
   },
   daysOff: []
@@ -1044,6 +1056,7 @@ function fmtINR(n){
    so the Sub Head field there is free text (with suggestions
    drawn from names already used).
 ============================================================ */
+const CLINIC_LOGO_DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAAExCAMAAAAEOSb3AAAA/1BMVEUAAADEmA9iKRtiEgz0psn31udbJxueyV6veQe1jRL8+/uthxO7kRAgtdtkKhvtlLxxag3//wD/AACe4POrowhezOr5qAAdp7ODvVZycHDqq7LVja0A///gkLOqpar+fwAiqcv5sfGwc5eu8/Vipa1w/v7l1N8uxOsXt/2frFgWbHCg0uLfztcmpcZ8ulLtfLNgtMpwnVVhr/WhytaffRSUZXWVt1lPuNMgmrmp+VWSu1YEB2j/f//ksccgeZnZtsYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACaJwiNAAAAQHRSTlMA/asS/fxf+xCeA2Le9MTxCAEB9w35AxX4BhJgAaISAqAHGwoUAqD/BBQIoF9n+hBaHAthShFenU8EmwMCnRVYQdzF6gAANPZJREFUeNrtXQtb27wO9uqSpWnXJllX1gLtgMI3LhsbG7vBtv//r44l+SInTpruUFZYfJ7zDZo0dvxa0itZMkI8rZaIy0v1n7ZtMUSJON3ZaVHacjlSGLUoPQaMAKXDdja21h7t6HbYytK2YvR7x7Z50qK0lRjNHEY7p60obSex29nxUGrN0ta1uSENprUUb+vaITdIrVnaTmV3OC1ipBTerJ2YrfSQWoW3xaxhthNo82Tazs2DQ5GsI0h1PDxp7dVGcUoasYYahaef0aK0IYTmRBLKgrRT0cpQEMjzpPWiNkINEtRgl3OcY/8SF6TT02pRSoDvzS/xjqSVpQ3yt9PLAkx3Hv0WnljN7xIfosvTlvs9DMkGcUpcrIEL0kwk87AoJSBEbXRvo833VhVMhl8n0y4HZeaDZuIO6h8OEYpc2+4ZIjEvMTcSBR8TkeSK7HGho0CruvWy6EW1onTPbU68wfOCZjjLd6LLlZ2SnDtP4d0o2IB2lDypWQvSvYN0GXaDZmLPffAT5z3x/KbfAszUZRs12nw7DIGkDI668HPHiFL3PJkm05mYHgpPAyYlXanNVzuvmyN3HkGbd7sKpC4psBncB54qi+UdisOK+Gvr0N63JAWm+VDMZ+Jgp4sNlR3mopzCvz/5Hm3AorUc/GEkCWZZ8W/ddrrzRLEGHUzg3GEupqHAUbvBfv8ghfSVEqQ9C9KeU2tTjzv8FoezgElrJen+WxmkKYTffhqQujd3WpCQuCWOmXch8D1tEn1t232DpAx/Lm4sRns6E1zTvkNGzWfAyk9bkP4CSDOgE1bbdafCChKosjkTpd+gCGctSH/BJqEne+AEacbJxaESqz3D+7rAMEQL0sODRG6OFaSjhAkSsgKIF+mL8xCHb4nD5im4MjRHYlYhSOoyF6XfEBuftSBtuM2Yd6q5HXxoTdKROPJRAKtkfCjl5h4W9zp26MO23WvE4WdZDpxJOhCHRX2WMFHq3gRksQXp/iXp985Ot0jApyOj7fJZMYgKKM6NoKmrPsxdCo+37X4laQ9nttt1tFqIIw3SSCaHgU29Q+vq7vEN2y49Z68F6Z7bHXEEmNyu5g13R8okjVQDbTcL0b/E2qyfInHMoUusb97O6r2zuyMNEqDUxc3vK2WSRojSkQg5qzeJC78CI5/t4FcN1tOW3f0f5icJ5akmzuvpanJ3qEHqjgLEQovSgWV/d2S0XNC8jNFdkrT5x+vJznxa4ODWcQWbgh+OCCTF7cRReMNoZpmDMkBdhxFoQM8kTectOo3bVFyenl5e4owlsykDac8HSS35qQZpz8904PlAhv/tKT/KB2lPOKOUzKi/S+i71YLNQwunlzqpxHw+6zKUupB2d4QgdUdgkn4GQPqNGtFFJLoMI8YbEKHEpra2IK0V/zm9BI1EVkI5RRykn8AEjkbaJIFHtMP4OdN3e8bbLYI0tR0qmC5P22jRWiB5/g4mfic65uCDNBdXziTtEW3rlnYzZhUgHdBT4T+Xp21Ib71WTrC7nGJGsW+Uuph+b0wS5XV1Syj9FsnNyMSNfJD2xJWA3IfpZZvp9QeSNAtwaQyzHTFlVQSJwceiRyAVIyc4/PtHiqLMRCD14VC0Xm4DrzVApmeQZyxGHCRxY0C64vgRSF1HAsCX6iq7NfNAGim/Sa2H0yAlbFFYhzl4jumV24ZFu39EIHVHCqS9rtdQ92mjdEA3KZDmXU/bJeEizhajRqHU03D566Gn7+ZgU2j+b4QHH49L/BYU3wPiwDm8Yu2zMEZtNl4zkMJVyjN1ZcRtyowoODLwMEhAAi1IVxwk4BHzYDe/W0lqpO7mlUXKSqvZHSSQLHBmIXI37YZAQqZOPJ1ouhEjzP8KCyyku7YYNEFpp2qNKz7NQboxIM274Qah7isbOTqwII2mSdWpAq0gNdR3P8PzNz1kooTeqQFp1q1qcy1uey5ChL9VrYR2T/3PPSUTijuyojQCR+lAg7RXCdJMB/iORHI+MhiNbioFadZ6SU1R6tZYJfB6uhhVPaTfGoCk9Jvda9eCFLZIXdlqu2ZtVrXMD8VsakXJMId6kPbQcHHegD5TUimsbUyocdBBx3a6XS9D6CcJjzVKd6DvGoHETVK3aPaM5wslTi1vaC5KP3fI0emaIA9hRXOt1ZbEmCuqMs0nRqMKkMAk6e0/kqqZyevq7uishx0dW29nv3ks3Hg6fopQd3p4Z9K4lEBcgTsL1smQvjJKe3iL5yXdJIf6eI7uDu8DueBdO/fNWfjBTsEtpVy5n2y2kYQfoJhYZl4BEveS9MZG18OIujloLdJaZmkejCB0PeNyo0QJ9N1VDUgz5cwCXc+PrCk7tCl8pZuTln+vJ0rhEMJPJT43IxfJnmKMRxhFN3KRHxNI3aMNPsPtpjMSpEA7aB3Z9SQpuQmTtSNF/YR2aUfi7kpjQImsRUnCCPkeMIu71HpXd0pMw2zwqM25W5M5BEM9aDJwSxbhAFG6AVpAoZ9iI0f3gDK+CEFgjokIB/va3PC121FA4cEe+GUi5lc68DCCncA99bEIgoR0W4yUwM1gkwMJxBU+4jD48KN21tdsubd75ArM8QS7K70prib9DlCwzlMRJHCTtCDpTSUICJ0G3N9Ra5DWbN/FmSgknhBIEHI7PU90GjhsOajlPzoyIb0iRnDlgOiFxegSN41KIB1Rv9/b3aQ14w6iDJLOAZrqBBOlo+7EwZVgG02+eIijI3Fl7j3MdVbfYQkk6M7g0+K0op2BWf/4BX7MNG8eMbNBwWtESaKKOwKPdjqrYOyYXKdcJTJPd/ZoQ26TRvZGaF8+thisaB8z9X/x+v3z589FKqaYHzRyfupIgwS5Q1MxPdARbWAZVyGMFAFPkqNEx8GhxnZm9shHzP2lNJUz8RH6ff9ajUB8bKWpyjlShujLj9fPnyuUXj9/PYXDBcn0mOm0JZW/xeGU6AJ5oHdBUcJrh/q2xJ1NeArmzjhWOrT3UXxUfSqMVPc/zsA8tS2k6dT/EaH3IErvn//ANGCGEsa0+aGdqA7RvbkKidLoSMnbob4JTmKd230pl5MyIiGbihT6VCC9B3n6AdLUQhJgdB9/qOlRi/n969dqUb9+LgoooW/62+5zQ47X3oii4WIW9HwOMTmvOwKTM02mpqhGSPdEyjbC9YG9vn4PAqWkadqiFGrPUdnARIEovUa7JAS3S8DvftrcqznuVVCi4/TuyCd46jc5A/8UbwCM2Df3PDlCa/gae3yPXZPCFaL9yz7FBmJkhAj+q3QOgJRolEx8NDGVSMpAKd4mbg4AhCMSmYKPRGG+gxv1L2GEO7B77vgHLFxXcpQpKTbrw4jTc5DkVpg8XgdqDlcyTpOaIkOGEy8n8sDmb+1gEisle98IobctfM8H/Kc9wOpOmB2qnQNRyJI0UdWPX1DbQvc0lOc/UjSUbSPK8IVUjAZJTRMglOnLV7gnpGf1SPADhUDPwUYFSNyVFxxSZmgKug5RnlmMAOWjLrNxV95ItBiDtkOe97GVJW6O0EWBqUFBeg1MwoBESq07ssmne05aDhPMZD24gcNxXSoRhICS5Ep9DihgRMLFaF3u3hHHSJHuL1rjwXJB2/S8xUirGTU3NCXv9Ry9NiQ4cxGiAxfYNijRfh+YJrEH4SEhLHkAYnd3oz4WeLTnkYksHFDBklOdgoWCPlqz9BrHov4jnn9pZcnJkeIMNDEaJLTbVuVp8RkZlI6Y3UfmNp0ilnpj6UDAn01Sn5GqE8am7ZkCjJH+xbjR32GtPNfdk1iTwgNZau3SmdZ1GieaKALp+Zepg4lUnpEA/QuABnV+RiJmlKZ6YMjzDDacpgcOI1fJdOBU3ZQgEqxv4g70UytJU4rG6Pl4bWaGQNIULzMqb8/ZEuFUnsLscGr14hHsxFoZgRtNmO5gLizQoz2r6hCiH8+9BqbRDOn56zNLYf5ZQbJ+ESma1/50EUyIgbIthj+gTMwOXNzV7qreYS1tbk0ZfmOkYSGUAdcbOmGD6MJZASKn9mhk/3ogD5SddiCN8JQaUAjai1OTfnSgp/nIzrn5zVqvmQNsT4vRCO4wEB9cGTE6O3MQ+X0LI0aE0tk/ruyU9n9PGub589evSxOFMJ3RfOJJAbMDnPjRHuC2dzAy6it30XRL2EwdxZ6CaLqH1G90AFDjLbB3FZQiGghJNozu9XT6TwvSD9ocUD9OQRo+nn15H5o0WMrJd43AjJDBqRdHCiciC5QhnMx10r0+nGN0sDfD2+g7ABFezkCNfgmKruifwcWjj2cYllco/cs8HARJrdMfX5gIvHvxQoRwEnDT9zOB5PqIJEgBgHpuBr9i7Ec94tPOPDnBnxRbR4D82xN1W3b2vQoiIV68eOeGmOIG1/t/mzqo9/+Isz/NxC5A9N8L1URQCX2hOzPc5rvZOzAzvwdcen6DsJ/MX+5ciGP8GXKGr/ZI0kYHBOihQUiEhQh6V2P4JsRSAfP9Ozrb7/9lq5QJhOg76ZITsfvmP5yid2grirMoQJzAOHz/fnaEEjI9UhBA27vRduhYXLx8+fIToYQihJf3rm6IH05NLFWUSYoAivLrDS2TN+ewZojaKIb+LxO8qSVuYv9EfIP5+e/Fm180NUGLTmqPCDZLOE0zpOkKm5fQxAmCNk3dHclsdjbGmT4jNVcGaY5QqJXyHwnTCQtdpf80B9dre1+Ir69evXjx6oVawLv7+NmX51U4nbmZn80O2R/OJoxeXhhRghj44YzBeWYNURGkL7hezlXX317AQF59sCh9/LdzxI093k8Ao1cwM+KEIJqXAgHCA+rL2dn0Fm68FbDto6yaQuYDgfRyCaTk7Ht6lhoRmJ6dffGYgihCpJuC6VyNRbx69dXJ0r/IG4r70krXEUZLMNgeR6+c1hKtSLNrpe1eIUgfxDKbfqm933vyR84M1GMEjuareFvUz/+KTM2PS296TBh9PfdnJfvu8eRKkJT90tSDoAaBXBLEVaaNXygxt/23Yqkfc1Ia/vFTP/Y40bbi2D9O+lp8oIXrixEQAvX/l2KVINF9QiH85pXQEklPgv0HUStKFMArqrNdcS7oOR5K07ke//GTBYqW4PGnU/prbg66ZEkYnZwXv3IiwO9Ba18tEiAIY5jm/f1fSBD/eyP2rSU5EzUK74diGsGxLrXKm3KQkvlcjf3ymH5+ktEF+M+nC8ip+lRUdkDKXonjfVEGCagafj0UHxCa6BknZh/8HIgY7HsGX4Ec+PKPLzDPn3ZeLkMVfidi+gqN27H/OSb8n36aCiGeWmEg+i2E0OknnAKuA5dEyJalr12LTy9fTpO5jhEogia+/MCmmNrZ2S3D3zJ58avwEBQyYHfCffnsjBzosSLtOxdFILQsIVX0T3YA4nBMRQPHTwwmguglvNvFcUlTEHEWoZmCAMIFIXp2FvD5z8ZnBWuyv19YAji138cB9o/POz75VASCS3F57SQWpp3L+dOBaapm//gCIHoZgAjEBUI5H5J6kEh5nSmwxtS+i4oowH744/Tsu/6mkikIFWox/qR6qABJYIjpush+1N1zguliHlxbj69piNT/LsL2NkGQlqHaLRQyZRaWG5NxMQ3hwCT8IsDCUXwuDEzJU9B0c4CI7P/xSY1aSapWM/x7vQmHYKnM4QVou/0wwbuuAInM4Jxg+vTohekYbRG8Kyi6k4p7LipBSpIpoPQBXJf7FafkBKb2A/Zc4TGguguDRHtf8GpPQZjmFEv7VCFFJC0A0nV4MhIMvL4SH2Dtnuzez6D2l9cnKCoAQiX2SC3VyKtuAKanhEkB9ekx84djfE2ciBrfb6kNdFhp7CuVRDGjazRa17vX5/8PPie7b3E1LD8I5QdhQLdy9NUSbhvqCUXiHy1K1xqjT0Is66037QFVq0yC6dXXD/o5+7u71/v766FzvlTw7NsQ6iuUT+0ehFfH1N/0CI8NVQW4WvuPWo7UT8kqw/Wyylkxc3r+4SvN69cP75YuEPp2d/ftLm4ChSd6/1zsXjtwlI5afviqo7AfVhk5GP68cu1YRWBQeswYzVcPH0n4RZ1egZk6f/vuzYv//oN90zdv3r3b3S0CojDb1w1/8i6f7y4/KKAp/ipIJpMazpgcNxAkVNZzrS4eIUpJsjRy1MBbmdeaaIAATb2a6ncQnCOoCKxvu7u7v85l6Evy/Je6+O7duzfmSwCwwpdQWLHG0CKttjVuMSaPVZCaqQG6eVmvWvaXuydaKL7RtNO8I1wEGW/mU3ePgnRXB/ZOTqaiiQpuMvFoux6nKNFKfCmaHoZ+gWZp1Zzs7+9a+3K+q8B6x+AwgHDgELp3377t2rDrydsG9JCCvp/EsvmbPkarRMGecLQnfDvEjRox2X2h+ELB4pz/As0G7ds3/cOvX+fnPvt+u7tsRt9PxHlz2ThONEiPT92Ri/ryQ9IsUJAASuBvNM+63j9XzK7MEIp3qXt2f+2KdRjyXNBgjtfRGRcreeA2qrsPWgmcrIXSn/2tCMW1lYzsuravhGv/D12XuZheYBih0d3Tk+YMaQtFSafAieumKCn3/WL6198VHNTmGBlBUkRQPEaQliYm1NiMQZBl/ncPIpnTKBrLhUma/SCuHyFIkAP0UiuCVU6Jm6ILiv3/rVUJxOWT0rqymRztXwsXVnmcsbulTSj9AL9NGy3LT3BA01/alsYMBkpfaNI9cKLlhXaSlkI8VpSWGiWINouT65WWPHEw/R17dIqS3AQi2I+afjKL8BHv+x0rL+nVy1evYFMA11oDnFT7dLpz+fCJoslcQYRStLrnKSjkpYboYvl45YhkSVy/Mk3v3K2KyMAUHV9+mj+wxkum80+Y/7Nahq7hnusLp8sf+f75vhr/h1cMJ1xzb6+TlTj9JdlPVonQMS0+jdDLvzra+xMm9Q4fRAknsXtSq3r+Qhbv/orpPtHpMNcC9TfqcPFEcrrQgVh+fcWa2WK9fnv9OIrvp9fXBNCSrTfMj1nuiyfSlie4t8pxEnYvHOKe2/um+0udFCHOl2WF8HQg0gEIyNL+KjhO4qtFSgnV7vJ8m155X1wbeAAff+Q47OOleGqN9lZvr02ygtDJIAqpd263R2F1vftXwcKMlbfWYC5dUoRVAUhSl0+0REnvge9+g406szP3n01b+Lbrdnv2dx8Wrf1zsdzlGSsgPQoeUcCHJP/k5GlX+53sFpIVXnCodIoJ35rbh826X+qz+0YMUomW14DMCX/y+e4uoiNKmpl2dE+un5ghqrLFWpvs7toUEb4Bbja9FVq/ShP7FmRMzexbs2e0etcI7qHtpre/TuCrJ+UvnbuElRf/IS5qIPCP+l3Jj142J2//CYAYaTJqn6WVvPDSFVx6yTsAbPfXeT0UYt9rYgV857smleiNn7LynyfWJnWlIHD/DlJqWbu0EoNVbcNEoHffoL2lTIbz81shZFUXcOH8XOc/fHunvvnOyyV64aWtmB/9vL6Tt9fin8THX9EWKkoBetMArToQ//T7iP/ur1tnP3dbeHy35C0HS6jVr1f9i802nfLFzd8+OAL7LTrVcoXpPYWErV+QqfXu3Zv7wOyNNnLfSlYOe77eP29BWEO0dhGuwIK+1Vl2aJreUXtTavoC3qTz8G4D3UAnSoTPW8H5fz0aoM/Iu/f/Xy2kSDw+61ddNUbb7gU1UEpADt9q4vY20HQiK/4g/o88vLa1rW1ta1vb2ta2trXtqbVsHE8WWTx+gK7yRQwtbSd9vTa24Cw23dViYjtt532NFmfq//0etP6GT3ZewOPH0Fc//tf/btVaik7NVb/3TLfeJmUpU1I07g10V/3Ni+2T0XQKIjNtNHXjDXY17rGuYhG389+kTUTM5w1EKd5YV+lDdfW0VN1C9J89e5CZU1r1obp6Wi0Vt7i2e/1xv69txYbUne5q0O/bnlRXLUgNJo70T0+bDJzFNNtgV7qnW9NVy+8aTBwu6cHtJF6MkYf3nn3eCOXSXfXAIxvHID/YVesprTYShJElWWksRLrRrtJs4TzaVtU1Ils9bb5tDCAbb8bB1F2xnuDvlj11XbcYL9Is91drmrrIWxq4nqnrWRmjZ3HGFNwmMXoW51y/+Wo1H8dFE5Vn6WJsRbv8Rni9sTxicBL+ffCoYZaNJ5PJeJFVMWy4HLw+NoS4t3G/fyw+Y0+DadZo/cGIKymFfuN1Kcd44v32IDDF/XFhQcg0juPPqRYHuF4YCFx38bJ0ET8UD04z3VWtW5SW3ghGPFYjzmuux/3PzUQZHqCov2oYNdw8ZckFvPVgQF1Co5+B1CIIaKZD1xVHWJjVrZWd+kq+aUHqrQw4xSDXg9KQLbITd73nvxK3c9XRKGF9M1oumw/uLkT8LNx62Hcq4kHF9Vs7KbH9ymTTGGm9OqiZmYXohUesvpRyoEttpe+tGEraH6z9tftQd2OQXe9ten2rGkSawm5A4TqKeXF1b17bLYQex6B29cq43y+PeCz96/wGJVT91cYF4sfh9TwRD9FSNuT+bf31Xur7lkaQtILcPGtoFqlj8jIIzX9/xfWANaL4Maxhfw30Ni5LikdOMgaC0goTTrCzRRxngoMI11NnAsxsDDbN7RrLbKooMgdJLfU4XuT+dQ6SyCbwkrXW2wR1e9T1Q+3JcGlgIMnQaAdF1W4Hb/HddCCajTJeGc6IOUj9LA7SCwtitnLkGYrmAPAAxBXIXLmE52yD9CGgYTM+okGFCtr4cnLzOmju9GIbl2XcA2m1MU2N+vwsJplRfs/WecL9saaK/jxJ80Fk2m7TJsnp3AaWmivokGvgSdpKwVT+bs+o+uATBpvfvi8sq3EtSD6IbjIGG8bIMZRm65bLflYraSt5Q57d9koMYZx9flZlAzYOUqC7sRhXgMhmbtMmiQ2ykWId1O7aZgykldEsKzSxd6dHiTeu77jkDlaA6K8Zb+biDevkNRSrZ0X7Qe04aLz1PnGxyUkFzg+wfR+vWFYeSFVaw19liubWeIeK1U8mdRHkLF3E+PdJWR5suoZi9RT0OCh4g6ZS4EIqXpDfN0qbd2gnHkjxChC9GZoOgsub/KwwCtmE8drA/E4mWT0DbTAhMeNeIXuR+SAuakmDWR2FV48Lrtam/dkVyyquApGZJD7KBaaxutBSEaLb6rxT7UXHIEd9bPqm9RQr56uD83pJG9SHSJ2a/ZxPKjnx4HbzYaHBswqtVdK+noJn4+xxcnpL/njAwMNed39QoVpxEiBJeeAia2ZRMGlvwBv4Ku+JrB7EWoxiHvaqdlwGYuOClA5WcEmuG9KgiNnlrS6Pq+KgaebnT/rTPYadml5VjNkp1gZ0N16pwPsNzYkLqhfv8zjvxkHyZD9wiGrOQfRMT1Ze3mMW2izSsLESseLugb0hXSiIyvsL+hFsjE3mI/Zkvx6kWu3pRVTqQNq0umMDCeoGD0T/elpc3rEXBvS1fVzenHKilIb3AYwrz8bYhEhxBR0yOT6I4yaCVCL+4wclDr7sx7VUyZshvrwp9BIzvCHuGHA3Blyj2VVcyiMvjIfNajOXpF6B+yCmTaKaJRg8kHoPCdJauoENk15h4kvDIPCUnreVY1ax3gfoQfZBn28yuht6a5A7z8oGz2W7HdRF9kISV1obBZAmmwaJyX48jsutHyZ3cYHcxQWNxZeXvqbAHE9kQUnmmeA5ykwOnI5xsx6vDmZyBd2LJ6X3UY70oImi4ta4tDYmPkjxpm1Sb0WssRdm6AVyRykg4ViJwY9edeChaDBS0xWn6WI8jvvFGfQVa7aelQ3C2EgGuLCU4hZr7nbcn5tkEmgKrcLxY06wGiQOuhfmVTZfDkXnduCVfk3sXk1cFtA4rFibK/CKV2o0vcw5K7u8HkibTkbPvXBufSvQX8l0EM6jWrYZX3zGd8pi5746g0EGx8A6MAY8YH/ioNfcSIGvav2659WZttjf7XiwjZqVzSMxng5agKxAMkFo8bF8udhNOE23FRIDSO7Zn7S4pJto/3VAqjFxGY8AllDw9w6yTZskxsD7oVbhvTNvTvlyMc56zjXEbVY0sWpGxkZJ2sy+AiDMoNjl6yvWla+0YAo8+Eb9RpG7+rjEqrD0Bhl48I6wAvdtx0Atp0nGdZV9LxtHHqSQFW92ojNPyOxi9GhvVqLU8Zpu0qrr6Z/uDvhh6fGmQVqHgY8rnIgBvG7qvX/ZoADTIqdVEYyJL2R2FtjLm88WTGYbpPXyjYje5M8ZOPOmQrJSFSzb8G5S0DuPq7xz9sXPPcAk9de8Ia0uq6+nVeegL7SUuWsG/0VAcCec3DVR4ONaReS5UdW8IatO7Sg9ZOMpXSu876yKh/Ilb2aDr3m9vIou7qDXv1XgFITMLsZJwCvjbKRBXs6qEMp4RRysHBMKPCdmK2HjXpIXQgmviHCM3Psi8LvMnx/zsAVPfx1QGvm4hLO5O8/j8pqZBAxd4xj4+E9j4PWZbly6003L0aIqfBqMgS+qqLt2N8rBLr57S3n+2Ti4Jx6X/VC3ZtYid5OqEMl6MfD6kEK83sL5f01Svez7IZbJilC954hOShxQdcczGAKbhqko52FmdSG0+nSAIM9oGAOvB4l18hBJd833x3oVDJwvyCJvYNquVyxLzW6LYdNg1JILe3wfMXDRiJfVgsRc7gegDZOqBIZVIIY8bh6EoDVcLQULTxNq87MQgYxDbugarNpFbaCgqMALMbI0jtM8ELcogsT0SJxt3CZlXhZKfa6np8AXgRyjcYkrj0W/Sv/HkxLL8Dek4gBIDUo+JysSGKqzUIwqnoxXStKkMvdh0+QuuExlFYhpWfN7BmhR9rIWrN/PfI+E3jRbqGcOShknXqhpPQW+ThYKIJNCRmZKhw7EdRtGdm0P0nTj2s7TDQEFXchQS+uduUIgVOmBClcZPlZcrxBbgOkdfPaGsygQAfVLtlhHgTdOI3QHKio/QawAaWyn7UFKZrns39Y7Cx6Inh7L45JJ7uFRn2k424BKwOOCuUqBSPYLCnPhySzEcFee7jqtz/VcBHNBF7oq3emBQjXgIrgQHqRgdlXAvTIPPGTNeSAFVliaerUH5racvvvZu1tdhBhRzwsugFIsRXHS+vCdlwce3IxLAyCh6u1Le9hhT4y9iIPvsNoDJbQPv3Gb1Ku1spUgeqGaLBAqiWEyxl78i9xYXcXd98Pr43Ry24Mz0dxjJzC4Xsqf2ovBRvbzRbOtl5Avm/rRHhMxxOijLrukheenoIUTBx7oWNF0VSHPILzlFwhWF+MtA/NfV6WdpXDqS0+vCA4pZlWqqfF2GXp0Hzf06WCFHagu1AmCOLaWeRArP268iO34M1FRgWR3mj8/CEapXy4b15G/gqRxgzIJ5RZQGTBL83ymd/UGuiLc38gCRRMLXggPmQi922xSfGp91ddkxbZ2qBITPxt48WbM2uAVl7fjUhcPdF7lZEXKy6IKRK75rSYoblsDqlxlDPpx3DdHoeUepLhZ+tlLxDSiUH5q3HDHL7ixwRW88R1QZsjsGPFRk+FHJz/bPcyJl/r0sLwh1GmlQzf2eEMxl8FitChkuQzs1nle2sMAjMaF9ErQ+ZPSU5vu+IV3n9JyzTN1gSzDgARRLX95KH9iMgaVqMf4MLpO5Okk4yDFxfqtdDLxrjsqE4f24TwlDlopE8FUJNKPRZC8LBVmMry6R8K3BqNJzIlzPCnYpGwce5yN6hHTXBtQG5PDA2R9uR4Yy9uz62fzvI7OAPEIDHy6qLz+GSdhUXZbs4CmgY8zURQDrjgKgODC9MvnyKwv/KfWcF46is5zQWGosbue+ddxfVHYN6UT40xReV+nMvlC3B+P9ZE1vQf7AxlwuJM/hrj59UHIRgwKGJV1GpxNFAf2OmIdc/B853E5epjVx+7ift8zgv34tub6M3uUVepzAshRA1UzTnsVJ35tfHuCVHfh8C3NnpT7mBKt64euD9T1jPMGRQbyTJRskp3NTA4KSs0sQS9fRH/KawdlqaJiENfZo1wUzxszJ3AZVzt0HVJcQcuRCjHk2nChTARQGvRvH+Zgrrjm2Le49joKztjUscRBmtFzs+kfqafmyx2n6dK5+nZhZi691Xxkndle7bnF1UmedEB5Vpmpy4i6fu3PbIO/UPj2DAN7D0PrlA4RUF3sZ0FCI662CF3v0/VUh0L7sTNdnN72+lxhp6b0iJb0mPOW1Nw+8aj9YNBP2Y0QHKLkiLg2VPy5FxyxIN8XxlF1feGvMs7bsoxV+RZSNLa8qXkbI0Jp2c5BpD/1Zg8sAZ36N8lLtxfeOteWfOz1pu3FhpuObX8uRryhHB4QxbfNHhKibBLIg2QkPJtMgtfdNIeOyxjbPTMGxMI8MQ/dvhgX1Fb5znHmS+w6rzTJsvrrk4XbKx6E4nGs6+xx/Wm6RUVoJkvzEI2sOsw6C2yZpX/nLHbCKOz/4Inb4zQXbfurLRayhw7COKSW27YNbazj6+0fnttmOYL0is/kIKSiN27B2kKMYvLusCkiHj9ERKFt6wSa8fwJV5wVb/4YmratG8IUVDdv67gHD3Yge9uaY9QrB+rbP222XcGT8t/jGLS0YbvkKAv8zZS4BWnbBKlXDLm21O6RmKm2bZmTFE/G1CimPG4xalvb2ta2trWtbW1r25NvUj72Dh54vlLJ25pfCN6R15aMy1WpA/jgVK74aHMASbn1m+lyo7ebaYikkBsVpOgJiVIuZMRak0W46n71yE6n5jky6nQ6w6gaJP3oQJ/N3ilSHQw76y62nA0w2j6Q1CsNO9TUv1GDORh28AvDitvVhVoM4LuyWiXqDpiwyqEeWhM9JKmDtf8wux6wrF9Bf63hO5lFPlw9Feo9ABwpK0Ri1WtGpr+6Dpwo5DjAdUQDx7fWPMOb6wWxanB/iTiwd4pWryP2BdkJvFEuotrXlGlUP4dSapCkXuEoGZ3GhAC/vqbNM8KPnW2fIEkm4Goa2JqVYWKg3mNIkyCdDNIM5jLMs/jHuSwsdBnowBNR2Yn8xSD978qiYZHmHWSh47JukyXZA0Vrr8ptAsmMEAEwa6ryC05d2cnL7X/sP/YJpcnxxKSMrVZvHdedB6usWkD6M6uxZPli7kPky16uvyv50/MtAYkEI3eIdYxYBZ2O3ECDagkRlXhfjjdL+03h/67fW0rpCSstV7+XTkRj0qwhYsacvsE7cN3pX7XGkoXB837Mz9KxhY6ZDN1R7jraCpCcLskdSBHOSwUx6CjyLcH4KKqbI7TAxiLkVGCDJby+1BQtstpUaPPidJck2sZZAXxRSq1RUaUKZ2QkMXhjEt0Qc3shNWYFni1dx9CPEsqcfpHqPr1aNB2kp7r3VTcNh53OlsDECKu0XIAob9AC07qG1xhqBk42A+dGRMaq4Q85QkWw4wqIcEYcT4nIq2FqBfWbk9Fo6IwgkRKp132EQ4y0GwD/4pNiGjVe7hjNjQDpceOIzA1s4eDTLLeFhRhtD9Njk2bVHZHeKLCStA3DySWP03in8B9pBEWapdmJ2Hx3zHTSAocFLYp8CtSps3bSAG9VM42YOhiCyA2NUOm7zeWoY/iNpK9zTKRn+EoMXw8N1su28QbSfep11eyDJkP9ELRhxvPFucblrKBCucDL9kPZMWROkuBJS5AVGACezEvianCRqLqYEYRHIKkEBhbZIUriZKDIOuQYRALXh/4WaUQrgDgidgN14AydWQw52KStoONSSN8n0VEEeDEMj8hKGyYh5ECMA+a/UxRMmNGOe77/r5BGW0p/GaNJMiChjRCeX0YDMGxZD5HwJwTM0KWVUIu3Vuv6htzYrpIDK60S3RreMHQjzLWfhMsuisL+Y8e9LFkTmiSJDFcKq2TIrOkFrLHNGU9htqswQc7wqUupMVBm6iQFiCQaGhKAwDpzJI+gzc3qkYgePNeOtOjAam0RRdtI7kwMIfflq8KGGc9XMulhq9Ksf5oBPUep036FuePP14/sIGuQWqo0SKBWkcw50WSSIM06y81qkYzsGUy0qdWrpAySJrmd7RGnokmyb2Y8b99v5zasU9Bk7IXNh3a9mn8jTyyoI38Zd8zljrTGzD6Clrfky0E6RcZDh9KTWBdLcSJlv1VakNKgtC2xVjYSG7GpDmF5MsZBEoEnGJFgsRpkew409rvTNHaVdLQy1QrTWC8pvSgbH6x0gzESrL+FsXUv4sFYJj2/tCf1R9H0zQeFUFMUSKm3geaUhY6DajNjEbU6pMO1jDU9yOulAw1/L5skuj60ht+pYKklO7frn7rKjYBFfFAO4g7QBU8C7Uil0xp2/8YFIraB3RkFJ4kXdZy+t6DwWZS5lhDLwKSmW9wkRcIKnDHfNFdRJHRAm27s2N+FE0VpxVRoDoMRDrfiaQ5tGFWvh5wuRBR2EL7iRhcYiTi3UcJpDeG2+sidxp63RN1FTmYwylMK2HcKGtvtPmlINR65lcVIc7COMQDgylgb06EwEH5JO6URU62SohkceTLgxhpinEKm3joy8Z1OZJWZfq7rOOoYn8q7QXNzvpsM39EhlWgbIqxSR6i0dxqRas755qq/TaC3ZSNU8ZZcDTtMGQ7JK4En0IIemiAMzL++gdQZBfzYXjeMpxNJFuqU1GMU6XhOx7lZQ84o7QV8KkXuCALqODcdSb0UcSCRFsQh53G50IG+TrQVFgmDBDqexk1Ph3humZ/a2zudiFmBiIEUCcsLUnzfSDCyJzvmhiG5O3Zp0F06mYF8WslSKoSLNQnfN8ptqEc4UyQ72nWzendobVSk9+Qj6yZ1/M2ZyGC+jXlDsrStJuoSgvLgvmhhB0kKG73VsLvtoDzwhRW7rjK8myQle7w/EPODLAzYdRwYQmgH5W+1vDLpjqUY8HfTd+Z5zu8PgiqLu3/lzbbArmBxIHxwub9F6DJ8vK0vWd5t9DvKyzcU9h3pyfLJHmYjKz+Q4QvrJYzIxhfkqo7k6qe2rW1ta1vb2ta2trWtbW1rW9va1ra2ta1tbWtb27ao3V9ovUFceJ26EHnvNe0PFbjmGye5lKtHuE0R9WYlVo98D0BadO4V9fsSHxmtHH2z3vR2XLRWIaqUqy6t+8Q/hcjbgoRCpoiXKK69Lu+xblqnluR1w4/0AQF58Yqr9qE0CErGWSM3SorqTCqWHrjxbKuckmSGVOZEeRRDXQ8iK4r0pauYq3i3NevoA4+IIpcr3FmxHiApOzQenTMZ6XyiCDR5tE45uBQ1iaN0lMqaT/zDFtFbYD4VZuFFLnl8WDU/nbp8SmkK1+SfrhtWhO7SpcK3mqRTm6UfGKj5gWWrNgWponesuBzyzODNitEwcmhZ1ISsm5+8/qARKib4cxXg0odpPLJejnBliU54LjtUk+UOH1jzbISKc2PoZBQm6pvME6HSQW2SdMouS8iurIqpO/MGhl06cEXmzLy7bK3cUUqlinJz+EHkyt0K+isvJAO5XMiqsgu23js8tT7P3cg8qqNGkYdMLozWZQGZIfInSm+g7PHScTP6Du9ZmqG4IfHDw3L/OAdejBZKK/KGEabvepFFxUqfVblzsqyCm33RPyYBTKosEhgOUmrTsiufWdFjXpgPM8S8+EQhRKULE0pUy+sdS1Y6SC8oTfa6n/En67qWIWNbTAjWcxTJyBTna3GMmIpXYhuZbF68lwxz5JJDsS5OyoI6i9g4fLXHD0wxhxCZ7OtIl+jh81HMI5MoG5kUWta7NJ+z94mMAuJPtKogMtQT04ml1U2QEq4H2zGvSyAbUi0Na6oiyk7F6g50//r3yA7CUnTpHzYGgiT9wkZTZj1kZfEoL/YQHeKUdACKTaYe6uewm4bD4bATqFW0B2WYF/dehps5U1HcsQc76Doyk5ath0qdst6xJhTGqEkD3TWUpSfat4ls9Wak+9DUuWM6wkxxOgZMJ4xr7cDOyQmZPL+eyQx12KHXGBqwSjPHBSnyjzaxh86R6tEVWayoR193dVkRs/ZaX9HBC1JGxbJf2XHASRkVqJs7rQmnwKR/d8wxTua0DFtnJk1NhDRJ+TZHW5r5A51jh+g/MbdvQ9U1xFtc7YQmzzax3+T320I1VkVlRTZAwUzBlTvUY+g9xRs7zVxn6NXT6HJvjUBOBxFIUzgamaodp1fptBAn10bfK7GQHXemCZ1m4I9YmnqhiEuA/zL6kR072XR2BdYBSVazFLGjYrAgJrLV6dLVbbq6MraozUkb9mwUtPZIoDrC1lh0hD0jBc8TgLMmTD1aR3rV1jnTdmWQdIGPGyH9AB2aOrUosmcZGCeEI4+qmj9bH2zAC0d15VSkz1DoaJ9as6RI63vJv0Q6Qfog6VI9HXSw9RfeG0pbG6MPRYgiV9bl13lpsdBnfhZrXZ36lNIOEefAPRHfBiuW6PWhXqNDj9M46/kldHEQVDSo58N3EliRbiCgI6V/QITs2EI5V2VoTo5wILnjL5xG9NZqbgr3U142H/ml345fFhe6x7EJXmSXw1B9NlUuS81DhMEaYfYPILGVxZoPCG7/7Qs7kJiq5k9k+sAYKDULflm50x/m+ABdiJP7ZYG1INlSb2kZhIbcFYYWZ445QHCOlZYkc4qPWbQdVt0rbK1OqWyeBwXclwIHMLojMrC2VZZ8q4JTbEmmuClXe7MZsnBLJx1ehbQTLWv2dLFfbpaeIXemIJBVvA+NnjT2kmY89UszPTxCIPl11PZkEv9klZKFc/Tbj8fYCuyhD0rklYKn7gQfPkz/6JK8wnySoSrFQm0hcW4PLJPFam8z2/xEh445WNQWxhaOwuBHAnhPTE3JZyT9VzGimjMz4C9SOyZvOQZB4sLmzt2xfMTyrFI1vl26UlfxcLtl2Qyvf3PcF1diVNaP9tWCzkLOZa+i9LdTPuHEnqrhpJYigEZ4I1uqpyu+uZB3vAnNWYE5P+vDqOXAkndHUFlhZvMihXe8kncyI4+9+8XqoqgRSkXceSFUxo4tQgNpF0hBU3SQ3DDM0PL5lcz63BHB3C4ZjPm4MF5Q1Ap6wkKjgWYHuEpPfrH3POc8lC80WXoiM+lS+EcHGDoJVMegy0yynhdZqN02B4B4+0p2+MzO87MG7OP9EyI8QfIMnokJRJH0NAUeyOik3Z2p4JaWNEbBSkDxBMaOrdNHz7+k7cr0lYuIW88SVwyaJDg9X5PGXASwGbLQmbDxBvZEe2iBOWjI01Du6Ahhzku0702OTtQZlkM10sZXpT3wjZ0oUDxroMBHI3MkiFna/ERBW/KN8R4uf1IfMhh19GrvuNPO9JRE9sgd2ZHu8IDImSZ3jJdm41HJvhaZEb0D2WjpjJ2eOkknpwnCOzUAMnVn9h/dEEtPNKBFHe80GvsmHc3YhfbopTW2OCGRLAn/kB1BGjkJRxEyT2Xajh5v3CZn+u3BIc6ppWeb5d6J/AMnhsZHlzm/7kydK9u2/os+PlEW4sPaXwnV0OsvySIrMn3aziLhavkjSdvhueudDvmSdluHDdHzcvGJepfRaml+uoE+OgJfW9r7Jb9DRMV1RbGDKHIbffZZ/vzYIzLNyRJ0ZgtiLA2Xiez5h2zjuhg0M8vf1evz300AwtrFoSPZGP6JyjuWQ+sj5SWHr3DIKvVJDqfhCfSRIzFDFk6xHUrdi3Q7PB07enJRmbfs4lQdE8A2Xeb6mVKfHWEPGbATEvirCfTu9vXZ8KWZNCL2qSXiiE1kdkVZxJOXjbM6bRlF3NgJHd0WJuiMP8BajIze1IcnmGs8flwO6Ev71yTKhfWlQvZI23MZuZJ8fT6/tAFod837kf1iXwqfKP0n8idYMc7tNyJ9+JreEPeeKUXZsgozKvuSvDN7TpjuyY7LxvRLQ6/Lq4l8ZinqN0NK+yJ5eGOkQfJZw53gRo+VtQl5fKdO1qRlORe//EgZ8IrkOltxFSX2qzLBUin8/V69hFM/+8v9TSKeuSQ9wajYcmz8V4ZsZCR1xD31lq+fNyVFRffuAUZU+Ohl6KCQwtYxWorUO5E/lbLiCKHCS7LO9E9mT1uksvHMhbdQpdjK/ERU4A97KIzH+wrT9NfOp9nSP2CCmhsdSPnQIJXyYaQ+mPLvnZf2ACk1/4ctih5cxvPSHzKReqvuL55ptyJ77m+CFMnoL+hhickBnps97DxAuvIqbRdt42FgkXFqH3w+/Jy4XMjOX7fa21vSsD2nlD3ASP4H2wxXM2c105QAAAAASUVORK5CYII=';
 const EXPENSE_CATEGORIES = {
   'Salary': [],
   'Rent': ['Clinic/Premises Rent','Equipment Rent','Other'],
@@ -2038,6 +2051,7 @@ function renderSettings(){
   document.getElementById('set-autoexport-n').value = DATA.settings.autoExportEveryNChanges ?? 2;
   document.getElementById('set-wa-reminder').value = DATA.settings.waReminderTemplate || '';
   document.getElementById('set-wa-birthday').value = DATA.settings.waBirthdayTemplate || '';
+  document.getElementById('set-wa-invoice').value = DATA.settings.waInvoiceTemplate || '';
 
   renderStaffRows();
   renderDaysOff();
@@ -2050,6 +2064,7 @@ function renderStaffRows(){
     <div class="row-edit" data-id="${st.id}">
       <input type="color" value="${st.color}" data-role="color">
       <input type="text" value="${escapeHtml(st.name)}" data-role="name">
+      <button class="btn btn-ghost btn-sm" data-role="details">Details</button>
       <button class="btn btn-danger btn-sm" data-role="del">Remove</button>
     </div>`).join('');
   holder.querySelectorAll('.row-edit').forEach(row=>{
@@ -2060,6 +2075,9 @@ function renderStaffRows(){
     row.querySelector('[data-role="color"]').addEventListener('change', e=>{
       const st = DATA.staff.find(s=>s.id===id); st.color = e.target.value; saveData();
     });
+    row.querySelector('[data-role="details"]').addEventListener('click', ()=>{
+      openPersonDetailsModal('staff', id);
+    });
     row.querySelector('[data-role="del"]').addEventListener('click', ()=>{
       if(confirm('Remove this doctor from the schedule? Existing appointments under them will remain in history but no longer show on the grid.')){
         DATA.staff = DATA.staff.filter(s=>s.id!==id); saveData(); renderStaffRows();
@@ -2069,7 +2087,7 @@ function renderStaffRows(){
   });
 }
 document.getElementById('btn-add-staff').addEventListener('click', ()=>{
-  DATA.staff.push({id:uid('s'), name:'New Doctor', color:'#0B6E71'});
+  DATA.staff.push({id:uid('s'), name:'New Doctor', color:'#0B6E71', phone:'', email:'', address:'', qualification:'', dob:'', dateJoined:'', dateResigned:'', emergencyName:'', emergencyPhone:''});
   saveData(); renderStaffRows(); showToast('Doctor added — rename on the left');
 });
 function renderTypeRows(){
@@ -2146,6 +2164,7 @@ function renderTeamRows(){
       <select data-role="role">
         ${['Clinic Manager','Reception','Housekeeping','Helper'].map(r=>`<option ${m.role===r?'selected':''}>${r}</option>`).join('')}
       </select>
+      <button class="btn btn-ghost btn-sm" data-role="details">Details</button>
       <button class="btn btn-danger btn-sm" data-role="del">Remove</button>
     </div>`).join('');
   holder.querySelectorAll('.row-edit').forEach(row=>{
@@ -2155,6 +2174,9 @@ function renderTeamRows(){
     });
     row.querySelector('[data-role="role"]').addEventListener('change', e=>{
       const m = DATA.team.find(x=>x.id===id); m.role = e.target.value; saveData();
+    });
+    row.querySelector('[data-role="details"]').addEventListener('click', ()=>{
+      openPersonDetailsModal('team', id);
     });
     row.querySelector('[data-role="del"]').addEventListener('click', ()=>{
       if(confirm('Remove '+row.querySelector('[data-role="name"]').value+' from the team directory? Their past advance/bonus records stay on file, just not linked to an active person.')){
@@ -2169,11 +2191,64 @@ document.getElementById('btn-add-team').addEventListener('click', ()=>{
   const role = document.getElementById('team-new-role').value;
   if(!name){ showToast('Enter a name first'); return; }
   DATA.team = DATA.team || [];
-  DATA.team.push({id: uid('team'), name, role});
+  DATA.team.push({id: uid('team'), name, role, phone:'', email:'', address:'', qualification:'', dob:'', dateJoined:'', dateResigned:'', emergencyName:'', emergencyPhone:''});
   document.getElementById('team-new-name').value = '';
   saveData(); renderTeamRows();
   showToast(name+' added to the team directory');
 });
+
+function openPersonDetailsModal(kind, id){
+  const list = kind==='staff' ? DATA.staff : DATA.team;
+  const person = list.find(x=>x.id===id);
+  if(!person) return;
+  const label = kind==='staff' ? 'Doctor' : 'Team Member';
+  const html = `
+  <div class="overlay" id="modal-overlay">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-head"><h3>${escapeHtml(person.name)} — Details</h3><button class="x-close" id="pd-close">&times;</button></div>
+      <div class="modal-body">
+        <div class="two-col">
+          <div class="field"><label>Contact Number</label><input type="text" id="pd-phone" value="${escapeHtml(person.phone||'')}"></div>
+          <div class="field"><label>Date of Birth</label><input type="date" id="pd-dob" value="${escapeHtml(person.dob||'')}"></div>
+        </div>
+        <div class="field"><label>Email</label><input type="email" id="pd-email" value="${escapeHtml(person.email||'')}" placeholder="name@example.com"></div>
+        <div class="field"><label>Address</label><textarea id="pd-address" style="min-height:60px;">${escapeHtml(person.address||'')}</textarea></div>
+        <div class="field"><label>Qualification</label><input type="text" id="pd-qualification" value="${escapeHtml(person.qualification||'')}" placeholder="e.g. BPT, MPT (Ortho)"></div>
+        <div class="two-col">
+          <div class="field"><label>Date Joined</label><input type="date" id="pd-datejoined" value="${escapeHtml(person.dateJoined||'')}"></div>
+          <div class="field"><label>Date Resigned</label><input type="date" id="pd-dateresigned" value="${escapeHtml(person.dateResigned||'')}"></div>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">Leave Date Resigned blank for anyone currently active.</div>
+        <div class="two-col">
+          <div class="field"><label>Emergency Contact Name</label><input type="text" id="pd-em-name" value="${escapeHtml(person.emergencyName||'')}"></div>
+          <div class="field"><label>Emergency Contact Phone</label><input type="text" id="pd-em-phone" value="${escapeHtml(person.emergencyPhone||'')}"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" id="pd-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="pd-save">Save Details</button>
+      </div>
+    </div>
+  </div>`;
+  const holder = document.createElement('div'); holder.innerHTML = html; document.body.appendChild(holder);
+  document.getElementById('pd-close').addEventListener('click', closeModal);
+  document.getElementById('pd-cancel').addEventListener('click', closeModal);
+  document.getElementById('pd-save').addEventListener('click', ()=>{
+    person.phone = document.getElementById('pd-phone').value.trim();
+    person.dob = document.getElementById('pd-dob').value;
+    person.email = document.getElementById('pd-email').value.trim();
+    person.address = document.getElementById('pd-address').value.trim();
+    person.qualification = document.getElementById('pd-qualification').value.trim();
+    person.dateJoined = document.getElementById('pd-datejoined').value;
+    person.dateResigned = document.getElementById('pd-dateresigned').value;
+    person.emergencyName = document.getElementById('pd-em-name').value.trim();
+    person.emergencyPhone = document.getElementById('pd-em-phone').value.trim();
+    saveData();
+    closeModal();
+    if(kind==='staff') renderStaffRows(); else renderTeamRows();
+    showToast('Details saved for '+person.name);
+  });
+}
 
 /* ---- Danger Zone: clear invoicing / expenses data ---- */
 document.getElementById('btn-clear-invoices').addEventListener('click', ()=>{
@@ -2254,6 +2329,10 @@ document.getElementById('set-wa-reminder').addEventListener('input', e=>{
 });
 document.getElementById('set-wa-birthday').addEventListener('input', e=>{
   DATA.settings.waBirthdayTemplate = e.target.value;
+  saveData();
+});
+document.getElementById('set-wa-invoice').addEventListener('input', e=>{
+  DATA.settings.waInvoiceTemplate = e.target.value;
   saveData();
 });
 document.getElementById('set-apppin').addEventListener('change', e=>{
@@ -2344,7 +2423,7 @@ function buildWorkbook(){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(refundRows), 'Refunds');
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-    DATA.staff.map(s=>({'Staff ID':s.id,'Doctor Name':s.name,'Color':s.color}))
+    DATA.staff.map(s=>({'Staff ID':s.id,'Doctor Name':s.name,'Color':s.color,'Phone':s.phone||'','Email':s.email||'','Address':s.address||'','Qualification':s.qualification||'','DOB':s.dob||'','Date Joined':s.dateJoined||'','Date Resigned':s.dateResigned||'','Emergency Contact Name':s.emergencyName||'','Emergency Contact Phone':s.emergencyPhone||''}))
   ), 'Staff');
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
@@ -2356,7 +2435,7 @@ function buildWorkbook(){
   ), 'Days Off');
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-    (DATA.team||[]).map(m=>({'Team Member ID':m.id, 'Name':m.name, 'Role':m.role}))
+    (DATA.team||[]).map(m=>({'Team Member ID':m.id, 'Name':m.name, 'Role':m.role, 'Phone':m.phone||'', 'Email':m.email||'', 'Address':m.address||'', 'Qualification':m.qualification||'', 'DOB':m.dob||'', 'Date Joined':m.dateJoined||'', 'Date Resigned':m.dateResigned||'', 'Emergency Contact Name':m.emergencyName||'', 'Emergency Contact Phone':m.emergencyPhone||''}))
   ), 'Team');
 
   const teamMap = Object.fromEntries((DATA.team||[]).map(m=>[m.id,m.name]));
@@ -2596,7 +2675,12 @@ function importFromExcel(file){
         return;
       }
 
-      const newStaff = staffIn.length ? staffIn.map(r=>({id: String(r['Staff ID']||uid('s')), name: r['Doctor Name']||'Doctor', color: r['Color']||'#0B6E71'})) : DATA.staff;
+      const newStaff = staffIn.length ? staffIn.map(r=>({
+        id: String(r['Staff ID']||uid('s')), name: r['Doctor Name']||'Doctor', color: r['Color']||'#0B6E71',
+        phone: String(r['Phone']||''), email: r['Email']||'', address: r['Address']||'', qualification: r['Qualification']||'',
+        dob: excelDateToStr(r['DOB'])||'', dateJoined: excelDateToStr(r['Date Joined'])||'', dateResigned: excelDateToStr(r['Date Resigned'])||'',
+        emergencyName: r['Emergency Contact Name']||'', emergencyPhone: String(r['Emergency Contact Phone']||'')
+      })) : DATA.staff;
       const newTypes = typesIn.length ? typesIn.map(r=>({id: String(r['Type ID']||uid('t')), name: r['Type Name']||'Type', color: r['Color']||'#0B6E71'})) : DATA.apptTypes;
       // Some rows (usually older entries) have Age/DOB/Start Date packed
       // into the Notes column instead of their own columns — e.g. "Age: 19
@@ -2780,7 +2864,10 @@ function importFromExcel(file){
       }).filter(rf=>rf.invoiceId) : DATA.refunds;
 
       const newTeam = teamIn.length ? teamIn.map(r=>({
-        id: String(r['Team Member ID']||uid('team')), name: r['Name']||'Unnamed', role: r['Role']||'Reception'
+        id: String(r['Team Member ID']||uid('team')), name: r['Name']||'Unnamed', role: r['Role']||'Reception',
+        phone: String(r['Phone']||''), email: r['Email']||'', address: r['Address']||'', qualification: r['Qualification']||'',
+        dob: excelDateToStr(r['DOB'])||'', dateJoined: excelDateToStr(r['Date Joined'])||'', dateResigned: excelDateToStr(r['Date Resigned'])||'',
+        emergencyName: r['Emergency Contact Name']||'', emergencyPhone: String(r['Emergency Contact Phone']||'')
       })) : DATA.team;
 
       const resolveTeamId = (idVal, nameVal)=>{
@@ -2965,6 +3052,9 @@ async function syncPull(silent){
     DATA.team = json.team || DATA.team || [];
     DATA.staffPayouts = json.staffPayouts || DATA.staffPayouts || [];
     DATA.cashHandovers = json.cashHandovers || DATA.cashHandovers || [];
+    DATA.invoices = json.invoices || DATA.invoices || [];
+    DATA.expenses = json.expenses || DATA.expenses || [];
+    DATA.refunds = json.refunds || DATA.refunds || [];
     if(currentRole==='owner'){
       DATA.doctorPayouts = json.doctorPayouts || DATA.doctorPayouts || [];
       doctorPayoutsUnlocked = true; // freshly pulled and Owner is here to see it — will be re-encrypted on next save
@@ -2989,12 +3079,12 @@ async function syncPull(silent){
     return true;
   }catch(e){
     console.error('sync pull failed', e);
-    setSyncStatus('Could not reach Google Sheet — showing last saved copy');
+    setSyncStatus('Could not reach Google Sheet ('+e.message+') — showing last saved copy');
     return false;
   }
 }
 
-async function syncPush(){
+async function syncPush(interactive){
   const url = DATA.settings.syncUrl;
   if(!url) return false;
   if(syncBusy){ syncPending = true; return; }
@@ -3005,7 +3095,19 @@ async function syncPush(){
     try{
       const checkJson = await callSync(url, 'check');
       if(checkJson.ok && checkJson.lastModified && DATA.settings.lastSyncStamp && checkJson.lastModified !== DATA.settings.lastSyncStamp){
-        showToast('Heads up: this Sheet was updated elsewhere since your last sync — saving your changes now, but worth reviewing for conflicts.');
+        if(interactive){
+          const pullFirst = confirm('This Google Sheet has changed since your last sync (likely from another computer).\n\nOK = pull those changes in first, then save yours on top (safest).\nCancel = save your changes as-is, overwriting whatever changed on the Sheet.');
+          if(pullFirst){
+            const ok = await syncPull(false);
+            if(ok){
+              if(document.getElementById('view-schedule').style.display!=='none') renderSchedule();
+              if(document.getElementById('view-patients').style.display!=='none'){ renderPatientList(); renderPatientDetail(); }
+              if(document.getElementById('view-finance').style.display!=='none') renderFinance();
+            }
+          }
+        } else {
+          showToast('Heads up: this Sheet was updated elsewhere since your last sync — saving your changes now, but worth reviewing for conflicts.');
+        }
       }
     }catch(e){ /* if the quick check fails, still proceed with the real push below */ }
 
@@ -3019,6 +3121,7 @@ async function syncPush(){
       patients: DATA.patients, appointments: DATA.appointments, staff: DATA.staff,
       apptTypes: DATA.apptTypes, daysOff: DATA.daysOff, team: DATA.team,
       staffPayouts: DATA.staffPayouts, cashHandovers: DATA.cashHandovers,
+      invoices: DATA.invoices, expenses: DATA.expenses, refunds: DATA.refunds,
       settings: DATA.settings
     };
     if(doctorPayoutsUnlocked) pushData.doctorPayouts = DATA.doctorPayouts;
@@ -3029,7 +3132,7 @@ async function syncPush(){
     setSyncStatus('Synced with Google Sheet ✓ ('+new Date().toLocaleTimeString()+')');
   }catch(e){
     console.error('sync push failed', e);
-    setSyncStatus('Sync failed — will retry on next change. Data is still saved in this browser.');
+    setSyncStatus('Sync failed: '+e.message+' — will retry on next change. Data is still saved in this browser.');
   }finally{
     syncBusy = false;
     if(syncPending){ syncPending=false; syncPush(); }
@@ -3068,7 +3171,7 @@ document.getElementById('btn-sync-save').addEventListener('click', async ()=>{
 });
 document.getElementById('btn-sync-now').addEventListener('click', async ()=>{
   if(!DATA.settings.syncUrl){ setSyncStatus('Not connected yet — paste a URL and click "Save & Connect" first.'); return; }
-  await syncPush();
+  await syncPush(true);
   showToast('Synced');
 });
 document.getElementById('btn-sync-pull').addEventListener('click', async ()=>{
@@ -3324,6 +3427,68 @@ function sendBirthdayWish(p){
   const msg = fillTemplate(DATA.settings.waBirthdayTemplate, { name:p.name, clinic: DATA.settings.clinicName || 'us' });
   openWa(p.phone, msg);
 }
+function sendInvoiceWhatsApp(invoice){
+  const p = DATA.patients.find(x=>x.id===invoice.patientId);
+  const phone = p ? p.phone : '';
+  if(!phone){ showToast('No phone number on file for this patient'); return; }
+  const balance = invoiceBalance(invoice);
+  const msg = fillTemplate(DATA.settings.waInvoiceTemplate, {
+    name: p ? p.name : (invoice.patientName||'Patient'),
+    clinic: DATA.settings.clinicName || 'us',
+    invoiceId: invoice.id,
+    date: fmtDateShort(invoice.date),
+    amount: fmtINR(invoice.amount),
+    balance: fmtINR(balance),
+    status: invoice.status || ''
+  });
+  openWa(phone, msg);
+}
+function printInvoice(invoice){
+  const p = DATA.patients.find(x=>x.id===invoice.patientId);
+  const st = DATA.staff.find(s=>s.id===invoice.staffId);
+  const type = DATA.apptTypes.find(t=>t.id===invoice.typeId);
+  const balance = invoiceBalance(invoice);
+  const patientName = p ? p.name : (invoice.patientName || '—');
+  const rows = [
+    ['Invoice ID', invoice.id],
+    ['Date', fmtDateShort(invoice.date)],
+    ['Patient', patientName],
+    ['Doctor', st ? st.name : '—'],
+    ['Session Type', type ? type.name : '—'],
+    ['Session Cost', fmtINR(invoice.sessionCost)],
+    ['Payment Method', invoice.paymentMethod || '—'],
+    ['Amount Received', fmtINR(invoice.amount)],
+    ['Balance Due', fmtINR(balance)],
+    ['Status', invoice.status || '—'],
+  ];
+  if(invoice.notes) rows.push(['Notes', invoice.notes]);
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${escapeHtml(invoice.id)}</title>
+  <style>
+    body{ font-family:Georgia,'Times New Roman',serif; color:#1a2e2c; max-width:560px; margin:40px auto; padding:0 20px; }
+    .logo{ display:block; max-width:220px; height:auto; margin:0 auto 14px; }
+    h1{ font-size:22px; margin-bottom:2px; text-align:center; }
+    .sub{ color:#5b706d; font-size:13px; margin-bottom:24px; text-align:center; }
+    table{ width:100%; border-collapse:collapse; }
+    td{ padding:9px 0; border-bottom:1px solid #e4e9e8; font-size:14px; }
+    td:first-child{ color:#5b706d; width:45%; }
+    td:last-child{ font-weight:600; text-align:right; }
+    .total-row td{ font-size:16px; border-top:2px solid #0B6E71; border-bottom:none; padding-top:14px; }
+    .foot{ margin-top:30px; font-size:12px; color:#5b706d; text-align:center; }
+    @media print{ body{ margin:0 auto; } }
+  </style></head><body>
+    <img class="logo" src="${CLINIC_LOGO_DATA_URI}" alt="${escapeHtml(DATA.settings.clinicName || 'Clinic')}">
+    <div class="sub">Invoice / Receipt</div>
+    <table>
+      ${rows.map(([k,v])=>'<tr><td>'+escapeHtml(k)+'</td><td>'+escapeHtml(String(v))+'</td></tr>').join('')}
+    </table>
+    <div class="foot">Generated on ${escapeHtml(fmtDateShort(todayStr()))}</div>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to print this invoice'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { w.focus(); w.print(); };
+}
 function openWaChooser(p){
   const upcoming = DATA.appointments
     .filter(a=>a.patientId===p.id && a.status!=='Cancelled' && a.date>=todayStr())
@@ -3354,6 +3519,8 @@ function renderWaPanel(today){
     .filter(a=>a.date===today && a.status!=='Cancelled')
     .sort((a,b)=>a.startTime.localeCompare(b.startTime));
   const birthdays = DATA.patients.filter(p=>p.dob && p.dob.slice(5)===today.slice(5));
+  const staffBirthdays = DATA.staff.filter(s=>s.dob && s.dob.slice(5)===today.slice(5) && !s.dateResigned);
+  const teamBirthdays = (DATA.team||[]).filter(m=>m.dob && m.dob.slice(5)===today.slice(5) && !m.dateResigned);
 
   let html = '';
   html += '<div style="font-size:12.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Appointment reminders — '+todaysAppts.length+'</div>';
@@ -3376,7 +3543,19 @@ function renderWaPanel(today){
     html += '<div style="display:flex; flex-direction:column; gap:6px;">' + birthdays.map(p=>
       '<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--gold-pale); border-radius:8px; padding:7px 10px;">'
       + '<span>🎂 '+escapeHtml(p.name)+'</span>'
-      + (p.phone? '<button class="btn btn-gold btn-sm" data-bday="'+p.id+'">Send wishes</button>' : '<span style="color:var(--ink-soft); font-size:12px;">No phone</span>')
+      + (p.phone? '<button class="btn btn-gold btn-sm" data-bday="'+p.id+'" data-bday-kind="patient">Send wishes</button>' : '<span style="color:var(--ink-soft); font-size:12px;">No phone</span>')
+      + '</div>'
+    ).join('') + '</div>';
+  }
+  const staffTeamBdays = [...staffBirthdays.map(s=>({person:s, kind:'staff', label:'Doctor'})), ...teamBirthdays.map(m=>({person:m, kind:'team', label:m.role}))];
+  html += '<div style="font-size:12.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin:14px 0 6px;">Staff &amp; Team Birthdays Today — '+staffTeamBdays.length+'</div>';
+  if(!staffTeamBdays.length){
+    html += '<div class="hint">No staff or team birthdays today.</div>';
+  } else {
+    html += '<div style="display:flex; flex-direction:column; gap:6px;">' + staffTeamBdays.map(({person,kind,label})=>
+      '<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--gold-pale); border-radius:8px; padding:7px 10px;">'
+      + '<span>🎂 '+escapeHtml(person.name)+' <span style="color:var(--ink-soft); font-size:12px;">('+escapeHtml(label)+')</span></span>'
+      + (person.phone? '<button class="btn btn-gold btn-sm" data-bday="'+person.id+'" data-bday-kind="'+kind+'">Send wishes</button>' : '<span style="color:var(--ink-soft); font-size:12px;">No phone</span>')
       + '</div>'
     ).join('') + '</div>';
   }
@@ -3389,8 +3568,10 @@ function renderWaPanel(today){
   });
   holder.querySelectorAll('[data-bday]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const p = DATA.patients.find(x=>x.id===btn.dataset.bday);
-      if(p) sendBirthdayWish(p);
+      const kind = btn.dataset.bdayKind;
+      const source = kind==='staff' ? DATA.staff : kind==='team' ? (DATA.team||[]) : DATA.patients;
+      const person = source.find(x=>x.id===btn.dataset.bday);
+      if(person) sendBirthdayWish(person);
     });
   });
 }
@@ -3728,6 +3909,20 @@ function filteredInvoices(){
   }).sort((a,b)=> (b.date+String(b.id)).localeCompare(a.date+String(a.id)));
 }
 function renderBilling(){
+  const today = todayStr();
+  const todaysInvoices = DATA.invoices.filter(inv=>inv.date===today);
+  document.getElementById('fin-inv-today-count').textContent = todaysInvoices.length+' invoice'+(todaysInvoices.length===1?'':'s')+' today';
+  const fromVal = document.getElementById('fin-inv-from').value, toVal = document.getElementById('fin-inv-to').value;
+  const weekStart = (()=>{ const d=new Date(); d.setDate(d.getDate()-d.getDay()); return toLocalDateStr(d); })();
+  const monthStart = (()=>{ const d=new Date(); d.setDate(1); return toLocalDateStr(d); })();
+  const presets = { today: [today,today], week: [weekStart,today], month: [monthStart,today], all: ['',''] };
+  ['today','week','month','all'].forEach(p=>{
+    const btn = document.getElementById('fin-inv-preset-'+p);
+    const isActive = fromVal===presets[p][0] && toVal===presets[p][1];
+    btn.classList.toggle('btn-primary', isActive);
+    btn.classList.toggle('btn-ghost', !isActive);
+  });
+
   const rows = filteredInvoices();
   const totalAmount = rows.reduce((s,r)=>s+(Number(r.sessionCost)||0),0);
   const totalReceived = rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
@@ -3800,6 +3995,25 @@ document.getElementById('fin-inv-clear').addEventListener('click', ()=>{
   document.getElementById('fin-inv-status').value='';
   document.getElementById('fin-inv-patient-filter').value='';
   renderBilling();
+});
+function applyInvoicePreset(from, to){
+  document.getElementById('fin-inv-from').value = from;
+  document.getElementById('fin-inv-to').value = to;
+  renderBilling();
+}
+document.getElementById('fin-inv-preset-today').addEventListener('click', ()=>{
+  const t = todayStr(); applyInvoicePreset(t, t);
+});
+document.getElementById('fin-inv-preset-week').addEventListener('click', ()=>{
+  const d = new Date(); d.setDate(d.getDate()-d.getDay());
+  applyInvoicePreset(toLocalDateStr(d), todayStr());
+});
+document.getElementById('fin-inv-preset-month').addEventListener('click', ()=>{
+  const d = new Date(); d.setDate(1);
+  applyInvoicePreset(toLocalDateStr(d), todayStr());
+});
+document.getElementById('fin-inv-preset-all').addEventListener('click', ()=>{
+  applyInvoicePreset('', '');
 });
 document.getElementById('fin-inv-new').addEventListener('click', ()=>openInvoiceModal(null));
 
@@ -3892,7 +4106,11 @@ function openInvoiceModal(invoice, prefill){
         <div class="field"><label>Comment / notes</label><textarea id="iv-notes">${escapeHtml(notes)}</textarea></div>
       </div>
       <div class="modal-foot">
-        <div>${invoice? '<button class="btn btn-danger btn-sm" id="iv-delete">Delete</button>' : ''}</div>
+        <div style="display:flex; gap:8px;">
+          ${invoice ? '<button class="btn btn-ghost btn-sm" id="iv-print" title="Print or save as PDF">🖨 Print / PDF</button>' : ''}
+          ${invoice ? '<button class="btn btn-ghost btn-sm" id="iv-whatsapp" title="Send invoice summary via WhatsApp">💬 WhatsApp</button>' : ''}
+          ${invoice? '<button class="btn btn-danger btn-sm" id="iv-delete">Delete</button>' : ''}
+        </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost btn-sm" id="iv-cancel">Cancel</button>
           <button class="btn btn-primary btn-sm" id="iv-save">${invoice? 'Save Changes' : 'Save Invoice'}</button>
@@ -3903,6 +4121,10 @@ function openInvoiceModal(invoice, prefill){
   const holder = document.createElement('div'); holder.innerHTML = html; document.body.appendChild(holder);
   document.getElementById('modal-x').onclick = closeModal;
   document.getElementById('iv-cancel').onclick = closeModal;
+  if(invoice){
+    document.getElementById('iv-print').onclick = ()=> printInvoice(invoice);
+    document.getElementById('iv-whatsapp').onclick = ()=> sendInvoiceWhatsApp(invoice);
+  }
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') closeModal(); });
 
   let invType = (!invoice && prefill.forceInvType==='package') ? 'package' : 'single';
@@ -4622,8 +4844,11 @@ function showLockScreen(){
 (async function init(){
   await loadData();
   checkDataIntegrity();
+  document.getElementById('fin-inv-from').value = todayStr();
+  document.getElementById('fin-inv-to').value = todayStr();
   if(DATA.settings.appPin || DATA.settings.ownerPin){ showLockScreen(); }
   document.querySelector('.rail-brand .name').textContent = DATA.settings.clinicName || 'Hheal Manager';
+  document.getElementById('app-logo-img').src = CLINIC_LOGO_DATA_URI;
   try{
     const dirHandle = await idbLoadHandle('backupDir');
     if(dirHandle){
