@@ -843,6 +843,11 @@ async function storageSet(key, value){
 
 const KEY = 'hheal-manager-data-v1';
 const PATIENT_TYPES = ['Walk-In','Referral','Association','Returning','FNF','Google','Advertising','Dr Referral'];
+const defaultWaTemplates = {
+  waReminderTemplate:'Hi {name}, this is a reminder from {clinic} for your appointment on {date} at {time} with {doctor}. Reply to this message if you need to reschedule. See you soon!',
+  waBirthdayTemplate:'Happy Birthday, {name}! 🎉 Wishing you a wonderful year ahead, from all of us at {clinic}.',
+  waInvoiceTemplate:'Hi {name}, here is your invoice summary from {clinic}.\nInvoice: {invoiceId}\nDate: {date}\nAmount: {amount}\nBalance Due: {balance}\nStatus: {status}\nThank you!'
+};
 let DATA = {
   staff: [
     {id:'s1', name:'Dr. Brinda Merchant', color:'#0B6E71'},
@@ -868,9 +873,9 @@ let DATA = {
   doctorPayoutsCipher: null,
   cashHandovers: [],
   settings: { startTime:'07:00', endTime:'19:00', interval:15, defaultDuration:30, clinicName:'Hheal Manager', syncUrl:'', autoExportFreq:'off', lastAutoExport:'', autoExportEveryNChanges:0, appPin:'', ownerPin:'', doctorPayoutsSalt:'', syncSecret:'', preventDoubleBooking:false, lastSyncStamp:'',
-    waReminderTemplate:'Hi {name}, this is a reminder from {clinic} for your appointment on {date} at {time} with {doctor}. Reply to this message if you need to reschedule. See you soon!',
-    waBirthdayTemplate:'Happy Birthday, {name}! 🎉 Wishing you a wonderful year ahead, from all of us at {clinic}.',
-    waInvoiceTemplate:'Hi {name}, here is your invoice summary from {clinic}.\nInvoice: {invoiceId}\nDate: {date}\nAmount: {amount}\nBalance Due: {balance}\nStatus: {status}\nThank you!',
+    waReminderTemplate: defaultWaTemplates.waReminderTemplate,
+    waBirthdayTemplate: defaultWaTemplates.waBirthdayTemplate,
+    waInvoiceTemplate: defaultWaTemplates.waInvoiceTemplate,
     patientSeq: 0
   },
   daysOff: []
@@ -962,6 +967,14 @@ async function loadData(){
       DATA.settings = Object.assign({}, defaultSettings, parsed.settings || {});
       DATA.settings.startTime = normalizeTimeStr(DATA.settings.startTime, defaultSettings.startTime);
       DATA.settings.endTime = normalizeTimeStr(DATA.settings.endTime, defaultSettings.endTime);
+      // A blank (but present) WhatsApp template means "never customized" —
+      // Object.assign above only fills in truly-missing keys, so an empty
+      // string saved from an earlier sync/session would otherwise silently
+      // override the code's default forever. Restore the default whenever
+      // the saved value is empty.
+      ['waReminderTemplate','waBirthdayTemplate','waInvoiceTemplate'].forEach(k=>{
+        if(!DATA.settings[k]) DATA.settings[k] = defaultSettings[k];
+      });
       // Doctor Payouts stays locked (empty in memory) until Owner login
       // successfully decrypts it — see buildStorableSnapshot/finishUnlock.
       // If there's no cipher yet (e.g. an older save from before this
@@ -3091,6 +3104,11 @@ async function syncPull(silent){
       const merged = Object.assign({}, DATA.settings, json.settings, {syncUrl:url});
       merged.startTime = normalizeTimeStr(json.settings.startTime, DATA.settings.startTime);
       merged.endTime = normalizeTimeStr(json.settings.endTime, DATA.settings.endTime);
+      // Same reasoning as loadData(): a blank template pulled from the
+      // Sheet shouldn't silently erase a good local/default value.
+      ['waReminderTemplate','waBirthdayTemplate','waInvoiceTemplate'].forEach(k=>{
+        if(!merged[k]) merged[k] = DATA.settings[k] || defaultWaTemplates[k];
+      });
       DATA.settings = merged;
     }
     if(json.lastModified) DATA.settings.lastSyncStamp = json.lastModified;
