@@ -1804,8 +1804,12 @@ function renderPatientDetail(){
     ${ invoices.length ? `<table class="hist"><thead><tr><th>Date</th><th>Invoice ID</th><th>Session Cost</th><th>Amount Taken</th><th>Payment Method</th><th>Balance</th><th>Status</th></tr></thead><tbody>
         ${invoices.map(inv=>{
           const bal = invoiceBalance(inv);
+          const pkg = inv.packageId ? (p.packages||[]).find(pk=>pk.id===inv.packageId) : null;
+          const balCell = pkg
+            ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left'
+            : (bal>0?fmtINR(bal):'—');
           const amtCell = inv.complimentary ? '₹0 (comp.)' : fmtINR(inv.amount);
-          return '<tr data-invid="'+inv.id+'"><td>'+fmtDateShort(inv.date)+'</td><td>'+escapeHtml(inv.id)+'</td><td>'+fmtINR(inv.sessionCost)+'</td><td>'+amtCell+'</td><td style="font-size:12px;">'+(inv.paymentMethod?escapeHtml(inv.paymentMethod):'—')+'</td><td>'+(bal>0?fmtINR(bal):'—')+'</td><td><span class="status-tag status-'+inv.status+'">'+inv.status+'</span></td></tr>';
+          return '<tr data-invid="'+inv.id+'"><td>'+fmtDateShort(inv.date)+'</td><td>'+escapeHtml(inv.id)+'</td><td>'+fmtINR(inv.sessionCost)+'</td><td>'+amtCell+'</td><td style="font-size:12px;">'+(inv.paymentMethod?escapeHtml(inv.paymentMethod):'—')+'</td><td>'+balCell+'</td><td><span class="status-tag status-'+inv.status+'">'+inv.status+'</span></td></tr>';
         }).join('')}
       </tbody></table>`
       : '<div style="color:var(--ink-soft); font-size:13px;">No invoices recorded yet.</div>' }
@@ -3925,6 +3929,7 @@ function ensureExpenseHeadOptions(){
 // complimentary invoice, that money still counts as received.
 function invoiceBalance(inv){
   if(inv.complimentary) return 0;
+  if(inv.rawBalance !== undefined && inv.rawBalance !== null && inv.rawBalance !== '') return Number(inv.rawBalance)||0;
   return ['Balance','Pending'].includes(inv.status) ? (Number(inv.amount)||0) : 0;
 }
 function invoiceReceivedAmount(inv){
@@ -4001,6 +4006,9 @@ function renderBilling(){
     const apptLabel = appt ? (fmtDateShort(appt.date)+' &middot; '+(apptType?escapeHtml(apptType.name):'')) : '—';
     const pkg = (p && inv.packageId) ? (p.packages||[]).find(pk=>pk.id===inv.packageId) : null;
     const bal = invoiceBalance(inv);
+    const balCell = pkg
+      ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left'
+      : (bal>0 ? fmtINR(bal) : '—');
     const amountCell = inv.complimentary
       ? '<span style="color:var(--ink-soft);">₹0 <span style="font-size:11px;">(comp.)</span></span>'
       : fmtINR(inv.amount);
@@ -4013,7 +4021,7 @@ function renderBilling(){
       + '<td>'+fmtINR(inv.sessionCost)+'</td>'
       + '<td>'+amountCell+'</td>'
       + '<td style="font-size:12px;">'+(inv.paymentMethod? escapeHtml(inv.paymentMethod) : '—')+'</td>'
-      + '<td>'+(bal>0? fmtINR(bal) : '—')+'</td>'
+      + '<td>'+balCell+'</td>'
       + '<td><span class="status-tag status-'+inv.status+'">'+inv.status+'</span></td>'
       + '</tr>';
   }).join('');
@@ -4065,6 +4073,7 @@ function openInvoiceModal(invoice, prefill){
   const sessionCost = invoice ? invoice.sessionCost : (prefill.sessionCost ?? prefill.amount ?? '');
   const amount = invoice ? invoice.amount : (prefill.amount || '');
   const complimentary = invoice ? !!invoice.complimentary : false;
+  const existingBalance = (invoice && invoice.rawBalance!==undefined && invoice.rawBalance!==null) ? invoice.rawBalance : '';
   const paymentMethod = invoice ? (invoice.paymentMethod || (Number(invoice.upi)>0 ? 'UPI' : 'Cash')) : 'Cash';
   const status = invoice ? invoice.status : 'Pending';
   const receiptNo = invoice ? (invoice.receiptNo||'') : '';
@@ -4127,17 +4136,13 @@ function openInvoiceModal(invoice, prefill){
         </div>
         <div class="two-col">
           <div class="field"><label id="iv-sessioncost-label">Session cost (₹) <span style="font-weight:400; text-transform:none; color:var(--ink-soft);">(actual value of the session)</span></label><input type="number" min="0" id="iv-sessioncost" value="${escapeHtml(String(sessionCost))}"></div>
-          <div class="field"><label>Amount taken (₹)</label>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" min="0" id="iv-amount" value="${escapeHtml(String(amount))}" style="flex:1;">
-              <button type="button" class="btn btn-ghost btn-sm" id="iv-copy-cost" title="Copy session cost into amount taken">= Cost</button>
-            </div>
-          </div>
+          <div class="field"><label>Amount taken (₹)</label><input type="number" min="0" id="iv-amount" value="${escapeHtml(String(amount))}"></div>
         </div>
         <div class="two-col">
           <div class="field"><label>Status</label><select id="iv-status">${statusOpts}</select></div>
           <div class="field"><label>Payment method</label><select id="iv-method">${PAYMENT_METHODS.map(m=>'<option value="'+m+'"'+(m===paymentMethod?' selected':'')+'>'+m+'</option>').join('')}</select></div>
         </div>
+        <div class="field"><label>Balance due (₹) <span style="font-weight:400; text-transform:none; color:var(--ink-soft);">(auto-calculated — edit to override, e.g. to carry forward a balance from before this app)</span></label><input type="number" min="0" id="iv-balance" value="${escapeHtml(String(existingBalance))}"></div>
         ${invoice
           ? '<div class="field"><button type="button" class="btn btn-gold btn-sm" id="iv-refund" style="width:100%;" '+(alreadyRefunded?'disabled':'')+'>'+(alreadyRefunded?'Already Refunded':'↩ Log Refund')+'</button></div>'
           : '<div class="hint" style="margin-top:-6px;">Save the invoice first to log a refund against it.</div>'}
@@ -4222,38 +4227,60 @@ function openInvoiceModal(invoice, prefill){
   function applyComplimentaryState(){
     const comp = document.getElementById('iv-complimentary').checked;
     ['iv-amount','iv-method'].forEach(id=>{ document.getElementById(id).disabled = comp; });
-    document.getElementById('iv-copy-cost').disabled = comp;
+    document.getElementById('iv-balance').disabled = comp;
     if(comp){
       document.getElementById('iv-amount').value = 0;
       document.getElementById('iv-status').value = 'Complimentary';
+      document.getElementById('iv-balance').value = 0;
     }
     updateBalanceHint();
   }
   document.getElementById('iv-complimentary').addEventListener('change', applyComplimentaryState);
-  document.getElementById('iv-copy-cost').addEventListener('click', ()=>{
-    document.getElementById('iv-amount').value = document.getElementById('iv-sessioncost').value || 0;
-    updateBalanceHint();
-  });
 
   // A single Amount Taken field covers both what was billed and what was
   // collected — Status is what tells the story: Paid/Refund means this amount
-  // came in, Balance/Pending means it's still outstanding. No separate
-  // "amount received" bookkeeping needed for the common paid-on-the-spot case.
+  // came in, Balance/Pending means it's still outstanding. The Balance Due
+  // field auto-fills from that same logic, but stays fully editable — once
+  // someone types into it directly, auto-fill stops touching it, so a
+  // carried-forward balance from before this app (unrelated to this specific
+  // session's cost) can be entered and won't get silently overwritten.
+  let balanceManuallyEdited = existingBalance !== '';
+  document.getElementById('iv-balance').addEventListener('input', ()=>{ balanceManuallyEdited = true; });
+
   function updateBalanceHint(){
     const comp = document.getElementById('iv-complimentary').checked;
+    const pkgId = document.getElementById('iv-package').value;
+    let pkgLine = '';
+    if(pkgId){
+      let foundPkg = null;
+      for(const p of DATA.patients){
+        const match = (p.packages||[]).find(pk=>pk.id===pkgId);
+        if(match){ foundPkg = match; break; }
+      }
+      if(foundPkg){
+        const total = Number(foundPkg.totalSessions)||0;
+        const used = Number(foundPkg.usedSessions)||0;
+        pkgLine = 'Package "'+foundPkg.label+'": '+used+' of '+total+' sessions used — '+(total-used)+' remaining';
+      }
+    }
     if(comp){
       const cost = Number(document.getElementById('iv-sessioncost').value)||0;
-      document.getElementById('iv-balance-hint').textContent = 'Complimentary — session cost ('+fmtINR(cost)+') recorded, but no income generated.';
+      document.getElementById('iv-balance-hint').textContent = pkgLine || ('Complimentary — session cost ('+fmtINR(cost)+') recorded, but no income generated.');
       return;
     }
-    const amt = Number(document.getElementById('iv-amount').value)||0;
-    const status = document.getElementById('iv-status').value;
-    document.getElementById('iv-balance-hint').textContent = (['Balance','Pending'].includes(status) && amt>0)
-      ? ('Outstanding: '+fmtINR(amt))
-      : '';
+    document.getElementById('iv-balance-hint').textContent = pkgLine;
+
+    if(!balanceManuallyEdited){
+      const cost = Number(document.getElementById('iv-sessioncost').value)||0;
+      const amt = Number(document.getElementById('iv-amount').value)||0;
+      const status = document.getElementById('iv-status').value;
+      const suggested = ['Balance','Pending'].includes(status) ? Math.max(cost-amt, 0) : 0;
+      document.getElementById('iv-balance').value = suggested || '';
+    }
   }
   ['iv-amount','iv-sessioncost'].forEach(id=>document.getElementById(id).addEventListener('input', updateBalanceHint));
   document.getElementById('iv-status').addEventListener('change', updateBalanceHint);
+  document.getElementById('iv-package').addEventListener('change', updateBalanceHint);
   applyComplimentaryState();
 
   const searchInput = document.getElementById('iv-patient-search');
@@ -4350,6 +4377,7 @@ function openInvoiceModal(invoice, prefill){
       sessionCost: costVal, complimentary: isComp,
       amount: amt, paymentMethod: isComp ? null : method,
       status: isComp ? 'Complimentary' : document.getElementById('iv-status').value,
+      rawBalance: isComp ? 0 : (Number(document.getElementById('iv-balance').value)||0),
       receiptNo: document.getElementById('iv-receipt').value.trim(),
       notes: document.getElementById('iv-notes').value.trim()
     };
