@@ -3082,8 +3082,14 @@ async function syncPull(silent){
     // Snapshot the last known-good copy before replacing anything, so a bad
     // sync can always be recovered from (kept under a separate storage key).
     try{ await storageSet(KEY+'-prepull-backup', JSON.stringify(await buildStorableSnapshot())); }catch(e){}
-    DATA.patients = json.patients || [];
-    DATA.appointments = json.appointments || [];
+    DATA.patients = (json.patients || []).map(p=>Object.assign({}, p, {id: String(p.id)}));
+    DATA.appointments = (json.appointments || []).map(a=>Object.assign({}, a, {
+      id: String(a.id),
+      patientId: a.patientId!=null ? String(a.patientId) : '',
+      staffId: a.staffId!=null ? String(a.staffId) : '',
+      typeId: a.typeId!=null ? String(a.typeId) : '',
+      packageId: a.packageId!=null && a.packageId!=='' ? String(a.packageId) : (a.packageId||'')
+    }));
     DATA.staff = (json.staff && json.staff.length) ? json.staff : DATA.staff;
     DATA.apptTypes = (json.apptTypes && json.apptTypes.length) ? json.apptTypes : DATA.apptTypes;
     DATA.daysOff = json.daysOff || DATA.daysOff || [];
