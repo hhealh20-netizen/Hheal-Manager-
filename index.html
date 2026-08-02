@@ -124,6 +124,8 @@
     box-shadow:0 1px 3px rgba(0,0,0,0.25); z-index:3;
   }
   .appt-bill-pin:hover{ background:var(--gold); color:#fff; }
+  .appt-bill-pin--done{ background:#1A7F4E; color:#fff; }
+  .appt-bill-pin--done:hover{ background:#146339; color:#fff; }
 
   /* ---------- Patients ---------- */
   .patients-layout{ display:flex; gap:18px; align-items:flex-start; }
@@ -517,7 +519,11 @@
           <h1>Day Sheet</h1>
           <div class="desc">Today's and tomorrow's appointments, patient and doctor at a glance.</div>
         </div>
-        <button class="btn btn-ghost" id="btn-print-daysheet">🖶 Print</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="date" id="daysheet-datepick" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line);">
+          <button class="btn btn-ghost btn-sm" id="daysheet-datepick-clear">Show Today/Tomorrow</button>
+          <button class="btn btn-ghost" id="btn-print-daysheet">🖶 Print</button>
+        </div>
       </div>
       <div id="daysheet-content"></div>
     </section>
@@ -1381,10 +1387,11 @@ function renderSchedule(){
     const statusLabel = a.status && a.status!=='Scheduled' ? ' <span style="opacity:.85;">('+a.status+')</span>' : '';
     block.innerHTML = '<span class="pname">'+escapeHtml(apptPatientName(a))+'</span><span class="ptype">'+escapeHtml(type.name)+statusLabel+'</span>';
     if(a.status!=='Cancelled'){
+      const isInvoiced = DATA.invoices.some(inv=>inv.apptId===a.id);
       const pin = document.createElement('div');
-      pin.className = 'appt-bill-pin';
+      pin.className = 'appt-bill-pin' + (isInvoiced ? ' appt-bill-pin--done' : '');
       pin.textContent = '₹';
-      pin.title = 'Bill this appointment';
+      pin.title = isInvoiced ? 'Already invoiced — click to view/edit' : 'Bill this appointment';
       pin.addEventListener('click', (e)=>{ e.stopPropagation(); openInvoiceFromAppt(a); });
       block.appendChild(pin);
     }
@@ -1411,6 +1418,8 @@ function escapeHtml(str){
 // on schedule blocks, and the Day Sheet's quick-invoice action — one place
 // that defines what "bill this appointment" prefills, so all three stay in sync.
 function openInvoiceFromAppt(appt){
+  const existing = DATA.invoices.find(inv=>inv.apptId===appt.id);
+  if(existing){ openInvoiceModal(existing); return; }
   openInvoiceModal(null, { patientId: appt.patientId, apptId: appt.id, staffId: appt.staffId, typeId: appt.typeId, packageId: appt.packageId||null, date: appt.date });
 }
 
@@ -3522,21 +3531,31 @@ function buildDaySheetTable(dateStr){
   return '<table class="daysheet"><thead><tr><th>Time</th><th>Patient</th><th>Doctor</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody>'+trs+'</tbody></table>';
 }
 function renderDaySheet(){
-  const today = todayStr();
-  const tmr = new Date(today+'T00:00:00'); tmr.setDate(tmr.getDate()+1);
-  const tomorrow = toLocalDateStr(tmr);
   const el = document.getElementById('daysheet-content');
-  el.innerHTML =
-    '<div class="daysheet-block">'+
-      '<h2>Today — '+fmtDateHuman(today)+'</h2>'+
-      '<div class="ds-sub">'+DATA.appointments.filter(a=>a.date===today).length+' appointment(s)</div>'+
-      buildDaySheetTable(today)+
-    '</div>'+
-    '<div class="daysheet-block">'+
-      '<h2>Tomorrow — '+fmtDateHuman(tomorrow)+'</h2>'+
-      '<div class="ds-sub">'+DATA.appointments.filter(a=>a.date===tomorrow).length+' appointment(s)</div>'+
-      buildDaySheetTable(tomorrow)+
-    '</div>';
+  const customDate = document.getElementById('daysheet-datepick').value;
+  if(customDate){
+    el.innerHTML =
+      '<div class="daysheet-block">'+
+        '<h2>'+fmtDateHuman(customDate)+'</h2>'+
+        '<div class="ds-sub">'+DATA.appointments.filter(a=>a.date===customDate).length+' appointment(s)</div>'+
+        buildDaySheetTable(customDate)+
+      '</div>';
+  } else {
+    const today = todayStr();
+    const tmr = new Date(today+'T00:00:00'); tmr.setDate(tmr.getDate()+1);
+    const tomorrow = toLocalDateStr(tmr);
+    el.innerHTML =
+      '<div class="daysheet-block">'+
+        '<h2>Today — '+fmtDateHuman(today)+'</h2>'+
+        '<div class="ds-sub">'+DATA.appointments.filter(a=>a.date===today).length+' appointment(s)</div>'+
+        buildDaySheetTable(today)+
+      '</div>'+
+      '<div class="daysheet-block">'+
+        '<h2>Tomorrow — '+fmtDateHuman(tomorrow)+'</h2>'+
+        '<div class="ds-sub">'+DATA.appointments.filter(a=>a.date===tomorrow).length+' appointment(s)</div>'+
+        buildDaySheetTable(tomorrow)+
+      '</div>';
+  }
   el.querySelectorAll('tr[data-id]').forEach(tr=>{
     tr.addEventListener('click', ()=>{
       const a = DATA.appointments.find(x=>x.id===tr.dataset.id);
@@ -3552,6 +3571,11 @@ function renderDaySheet(){
   });
 }
 document.getElementById('btn-print-daysheet').addEventListener('click', ()=> window.print());
+document.getElementById('daysheet-datepick').addEventListener('change', renderDaySheet);
+document.getElementById('daysheet-datepick-clear').addEventListener('click', ()=>{
+  document.getElementById('daysheet-datepick').value = '';
+  renderDaySheet();
+});
 
 /* ============================================================
    DASHBOARD
