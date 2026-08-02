@@ -3061,7 +3061,21 @@ async function syncPull(silent){
   if(!url) return false;
   try{
     if(!silent) setSyncStatus('Connecting…');
-    const json = await callSync(url, 'get');
+    // Pulled in separate smaller requests rather than one giant one — a
+    // single request covering all 8000+ appointments and 2000+ invoices at
+    // once is large/slow enough that Google's own infrastructure can issue
+    // an internal redirect partway through, and browsers are required to
+    // convert a POST to a GET when following that kind of redirect —
+    // landing on doGet() and producing a confusing "POST only" error that
+    // has nothing to do with the app's own code. Smaller requests stay
+    // well under whatever threshold triggers that redirect.
+    const parts = ['core','patients','appointments','invoices','finance'];
+    const json = {};
+    for(const part of parts){
+      const partJson = await callSync(url, 'get', {part});
+      if(partJson.ok===false) throw new Error((partJson.error||'Unknown error from script')+' (while fetching '+part+')');
+      Object.assign(json, partJson);
+    }
     if(json.ok===false) throw new Error(json.error||'Unknown error from script');
     // Data-loss guard: if the Sheet unexpectedly comes back empty while we
     // already hold real local records, don't silently wipe everything —
