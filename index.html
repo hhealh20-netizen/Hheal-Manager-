@@ -1094,6 +1094,16 @@ function fmtINR(n){
   n = Number(n)||0;
   return '\u20B9' + n.toLocaleString('en-IN');
 }
+// Colors the ₹ amount by what it actually means for that invoice, so
+// payment status is visible at a glance in a list of many invoices —
+// green once money has genuinely come in, amber while still outstanding,
+// muted for anything that's neither (refunded, cancelled, complimentary).
+function coloredAmount(inv){
+  if(inv.complimentary) return '<span style="color:var(--ink-soft);">₹0 <span style="font-size:11px;">(comp.)</span></span>';
+  const colors = { Paid:'var(--success, #1a7f4e)', Balance:'#b8860b', Pending:'#b8860b', Refund:'var(--ink-soft)', Cancelled:'var(--ink-soft)' };
+  const color = colors[inv.status] || 'var(--ink)';
+  return '<span style="color:'+color+'; font-weight:600;">'+fmtINR(inv.amount)+'</span>';
+}
 /* ============================================================
    FINANCE — expense heads & sub heads, matched to the clinic's
    existing Expense Sheet so entries stay consistent with it.
@@ -1411,7 +1421,7 @@ let editingApptId = null;
 function openApptModal(appt, prefill){
   editingApptId = appt ? appt.id : null;
   const s = DATA.settings;
-  const patient = appt ? DATA.patients.find(p=>p.id===appt.patientId) : null;
+  const patient = appt ? DATA.patients.find(p=>p.id===appt.patientId) : ((prefill && prefill.patientId) ? DATA.patients.find(p=>p.id===prefill.patientId) : null);
   const staffId = appt ? appt.staffId : (prefill && prefill.staffId) || (DATA.staff[0] && DATA.staff[0].id) || '';
   const date = appt ? appt.date : (prefill && prefill.date) || currentDate;
   const startTime = appt ? appt.startTime : (prefill ? minutesToTimeInput(prefill.startMin) : s.startTime);
@@ -1753,6 +1763,7 @@ function renderPatientDetail(){
     <div class="pd-head">
       <h2>${escapeHtml(p.name)} ${p.archived? '<span style="font-size:11px; font-weight:700; color:var(--danger); text-transform:uppercase; vertical-align:middle;">Archived</span>' : ''} <span style="font-size:12px; font-weight:400; color:var(--ink-soft);">Patient ID: ${escapeHtml(p.code||p.id)}</span></h2>
       <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary btn-sm" id="pd-book-appt">+ Book Appointment</button>
         ${p.phone? '<button class="btn btn-gold btn-sm" id="pd-wa">WhatsApp</button>' : ''}
         <button class="btn btn-ghost btn-sm" id="pd-edit">Edit</button>
         ${p.archived
@@ -1785,7 +1796,7 @@ function renderPatientDetail(){
           + '<div>'
           + '<div style="font-weight:700;">'+escapeHtml(pkg.label||'Package')+'</div>'
           + '<div style="font-size:12px; color:var(--ink-soft);">'+(pkg.purchaseDate? 'Purchased '+fmtDateShort(pkg.purchaseDate) : 'No purchase date set')+(pkg.price? ' &middot; ₹'+escapeHtml(String(pkg.price)) : '')+'</div>'
-          + '<div style="font-size:13px; margin-top:4px;"><b style="color:'+(remaining<=0?'var(--danger)':'var(--ink)')+';">'+(pkg.usedSessions||0)+' / '+(pkg.totalSessions||0)+' sessions used</b>'+(remaining<=0?' — renewal needed':' &middot; '+remaining+' remaining')+'</div>'
+          + '<div style="font-size:13px; margin-top:4px;"><b style="color:'+(remaining<=0?'var(--danger)':'var(--ink)')+';">'+(pkg.usedSessions||0)+' / '+(pkg.totalSessions||0)+' sessions used</b>'+(remaining<=0?' — renewal needed':' &middot; '+remaining+' remaining')+(packageBalance(pkg)>0? ' &middot; <b style="color:#b8860b;">'+fmtINR(packageBalance(pkg))+' balance</b>' : '')+'</div>'
           + (pkg.notes? '<div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">'+escapeHtml(pkg.notes)+'</div>' : '')
           + '</div>'
           + '<div style="display:flex; gap:6px;">'
@@ -1819,7 +1830,7 @@ function renderPatientDetail(){
           const pkgPart = pkg ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left' : '';
           const balPart = bal>0 ? fmtINR(bal) : '';
           const balCell = (pkgPart && balPart) ? (pkgPart+' &middot; '+balPart) : (pkgPart || balPart || '—');
-          const amtCell = inv.complimentary ? '₹0 (comp.)' : fmtINR(inv.amount);
+          const amtCell = coloredAmount(inv);
           return '<tr data-invid="'+inv.id+'"><td>'+fmtDateShort(inv.date)+'</td><td>'+escapeHtml(inv.id)+'</td><td>'+fmtINR(inv.sessionCost)+'</td><td>'+amtCell+'</td><td style="font-size:12px;">'+(inv.paymentMethod?escapeHtml(inv.paymentMethod):'—')+'</td><td>'+balCell+'</td><td><span class="status-tag status-'+inv.status+'">'+inv.status+'</span></td></tr>';
         }).join('')}
       </tbody></table>`
@@ -1887,6 +1898,7 @@ function renderPatientDetail(){
     });
   });
   if(document.getElementById('pd-add-invoice')) document.getElementById('pd-add-invoice').onclick = ()=>openInvoiceModal(null, { patientId: p.id });
+  if(document.getElementById('pd-book-appt')) document.getElementById('pd-book-appt').onclick = ()=>openApptModal(null, { patientId: p.id });
 }
 function fmtDateShort(dstr){
   const d = new Date(dstr+'T00:00:00');
@@ -1911,9 +1923,14 @@ function openPackageModal(patient, existingPkg){
           <div class="field"><label>Total sessions</label><input type="number" id="pk-total" min="1" value="${existingPkg?existingPkg.totalSessions:10}"></div>
           <div class="field"><label>Purchase date</label><input type="date" id="pk-date" value="${existingPkg?escapeHtml(existingPkg.purchaseDate||''):todayStr()}"></div>
         </div>
-        <div class="field"><label>Price (optional)</label><input type="text" id="pk-price" placeholder="e.g. 8000" value="${existingPkg?escapeHtml(existingPkg.price||''):''}"></div>
+        <div class="two-col">
+          <div class="field"><label>Price (total, optional)</label><input type="text" id="pk-price" placeholder="e.g. 8000" value="${existingPkg?escapeHtml(existingPkg.price||''):''}"></div>
+          <div class="field"><label>Per-session cost (₹)</label><input type="number" min="0" id="pk-persession" value="${existingPkg&&existingPkg.perSessionCost!=null?existingPkg.perSessionCost:''}"></div>
+        </div>
+        <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Per-session cost auto-fills from Price ÷ Total sessions — edit it directly if the real pricing isn't an even split.</div>
         <div class="field"><label>Notes</label><textarea id="pk-notes">${existingPkg?escapeHtml(existingPkg.notes||''):''}</textarea></div>
         ${existingPkg? '<div class="hint">Sessions used ('+(existingPkg.usedSessions||0)+') stay as they are — use the +1/−1 buttons on the package card to adjust that instead.</div>' : ''}
+        ${existingPkg? '<div class="field"><label>Balance override (₹, optional)</label><input type="number" min="0" id="pk-balance-override" placeholder="Leave blank to auto-calculate" value="'+(existingPkg.balanceOverride!=null?existingPkg.balanceOverride:'')+'"></div><div class="hint" style="margin-top:-6px;">Balance normally auto-calculates as sessions remaining &times; per-session cost (the prepaid value not yet used). Set a value here only to override that — e.g. a discount not captured elsewhere.</div>' : ''}
       </div>
       <div class="modal-foot">
         <div></div>
@@ -1928,16 +1945,36 @@ function openPackageModal(patient, existingPkg){
   document.getElementById('modal-x').onclick = closeModal;
   document.getElementById('pk-cancel').onclick = closeModal;
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') closeModal(); });
+
+  // Per-session cost auto-fills from Price ÷ Total sessions, same
+  // "suggest but let them override" pattern used for invoice Balance —
+  // stops auto-updating the instant someone types into it directly.
+  let perSessionManuallyEdited = existingPkg && existingPkg.perSessionCost!=null;
+  function updatePerSessionSuggestion(){
+    if(perSessionManuallyEdited) return;
+    const price = Number(document.getElementById('pk-price').value)||0;
+    const total = Number(document.getElementById('pk-total').value)||0;
+    document.getElementById('pk-persession').value = total>0 ? Math.round(price/total) : '';
+  }
+  document.getElementById('pk-price').addEventListener('input', updatePerSessionSuggestion);
+  document.getElementById('pk-total').addEventListener('input', updatePerSessionSuggestion);
+  document.getElementById('pk-persession').addEventListener('input', ()=>{ perSessionManuallyEdited = true; });
+  if(!existingPkg) updatePerSessionSuggestion();
+
   document.getElementById('pk-save').onclick = ()=>{
     const label = document.getElementById('pk-label').value.trim();
     const total = Number(document.getElementById('pk-total').value) || 0;
     if(!label || total<=0){ alert('Please enter a package name and a total number of sessions.'); return; }
+    const perSessionCost = document.getElementById('pk-persession').value!=='' ? Number(document.getElementById('pk-persession').value) : null;
     patient.packages = patient.packages || [];
     if(existingPkg){
       existingPkg.label = label;
       existingPkg.totalSessions = total;
       existingPkg.purchaseDate = document.getElementById('pk-date').value;
       existingPkg.price = document.getElementById('pk-price').value.trim();
+      existingPkg.perSessionCost = perSessionCost;
+      const overrideVal = document.getElementById('pk-balance-override').value;
+      existingPkg.balanceOverride = overrideVal!=='' ? Number(overrideVal) : null;
       existingPkg.notes = document.getElementById('pk-notes').value.trim();
       saveData(); closeModal(); renderPatientDetail();
       showToast('Package updated');
@@ -1947,6 +1984,8 @@ function openPackageModal(patient, existingPkg){
       id: uid('pkg'), label, totalSessions: total, usedSessions: 0,
       purchaseDate: document.getElementById('pk-date').value,
       price: document.getElementById('pk-price').value.trim(),
+      perSessionCost: perSessionCost,
+      balanceOverride: null,
       notes: document.getElementById('pk-notes').value.trim()
     });
     saveData(); closeModal(); renderPatientDetail();
@@ -2423,7 +2462,9 @@ function buildWorkbook(){
       packageRows.push({
         'Patient ID': p.id, 'Patient Name': p.name, 'Package ID': pkg.id, 'Package Name': pkg.label||'',
         'Total Sessions': pkg.totalSessions||0, 'Used Sessions': pkg.usedSessions||0,
-        'Purchase Date': pkg.purchaseDate||'', 'Price': pkg.price||'', 'Notes': pkg.notes||''
+        'Purchase Date': pkg.purchaseDate||'', 'Price': pkg.price||'',
+        'Per Session Cost': pkg.perSessionCost!=null?pkg.perSessionCost:'', 'Balance Override': pkg.balanceOverride!=null?pkg.balanceOverride:'',
+        'Notes': pkg.notes||''
       });
     });
   });
@@ -2809,7 +2850,10 @@ function importFromExcel(file){
           pat.packages.push({
             id: String(r['Package ID']||uid('pkg')), label: r['Package Name']||'Package',
             totalSessions: Number(r['Total Sessions'])||0, usedSessions: Number(r['Used Sessions'])||0,
-            purchaseDate: excelDateToStr(r['Purchase Date'])||'', price: r['Price']||'', notes: r['Notes']||''
+            purchaseDate: excelDateToStr(r['Purchase Date'])||'', price: r['Price']||'',
+            perSessionCost: (r['Per Session Cost']!==undefined && r['Per Session Cost']!=='') ? Number(r['Per Session Cost']) : null,
+            balanceOverride: (r['Balance Override']!==undefined && r['Balance Override']!=='') ? Number(r['Balance Override']) : null,
+            notes: r['Notes']||''
           });
         });
       }
@@ -3989,6 +4033,26 @@ function invoiceBalance(inv){
 function invoiceReceivedAmount(inv){
   return (inv.status==='Paid' || inv.status==='Refund') ? (Number(inv.amount)||0) : 0;
 }
+// Prepaid model: a package is normally paid for upfront, so using a
+// session doesn't automatically create a debt -- balance only shows once
+// the value of sessions actually used runs ahead of what's actually been
+// paid toward this package (payments falling behind usage). Manual
+// override always wins when set, for cases the formula doesn't capture
+// (a discount given outside the normal invoice flow, etc).
+// Package balance is the remaining prepaid VALUE of unused sessions — like
+// a gift card balance, not money owed. A patient pays for the whole
+// package upfront; each session used draws down that prepaid value. So a
+// 5-session, ₹900/session package (₹4500 paid upfront) with 1 session used
+// shows a ₹3600 balance — the value of the 4 sessions still remaining —
+// regardless of how that ₹4500 was actually collected. Manual override
+// always wins when set (e.g. a discount or adjustment not otherwise captured).
+function packageBalance(pkg){
+  if(!pkg) return 0;
+  if(pkg.balanceOverride!=null && pkg.balanceOverride!=='') return Number(pkg.balanceOverride)||0;
+  const perSession = Number(pkg.perSessionCost)||0;
+  const remaining = Math.max((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0), 0);
+  return remaining * perSession;
+}
 function filteredInvoices(){
   const from = document.getElementById('fin-inv-from').value;
   const to = document.getElementById('fin-inv-to').value;
@@ -4063,9 +4127,7 @@ function renderBilling(){
     const pkgPart = pkg ? ((Number(pkg.totalSessions)||0) - (Number(pkg.usedSessions)||0))+' left' : '';
     const balPart = bal>0 ? fmtINR(bal) : '';
     const balCell = (pkgPart && balPart) ? (pkgPart+' &middot; '+balPart) : (pkgPart || balPart || '—');
-    const amountCell = inv.complimentary
-      ? '<span style="color:var(--ink-soft);">₹0 <span style="font-size:11px;">(comp.)</span></span>'
-      : fmtINR(inv.amount);
+    const amountCell = coloredAmount(inv);
     return '<tr data-id="'+inv.id+'">'
       + '<td>'+escapeHtml(inv.id)+'</td>'
       + '<td>'+fmtDateShort(inv.date)+'</td>'
@@ -4174,6 +4236,7 @@ function openInvoiceModal(invoice, prefill){
             <div class="field"><label>Package name</label><input type="text" id="iv-pkg-name" placeholder="e.g. 10-Session Aqua Pack"></div>
             <div class="field"><label>Total sessions</label><input type="number" min="1" id="iv-pkg-sessions" value="10"></div>
           </div>
+          <div class="field"><label>Per-session cost (₹)</label><input type="number" min="0" id="iv-pkg-persession" placeholder="Auto-fills from Session Cost ÷ Total sessions"></div>
           <div class="field"><label>Package notes (optional)</label><textarea id="iv-pkg-notes" rows="2" placeholder="e.g. renewal, discount agreed, etc."></textarea></div>
           <div class="hint" style="margin-top:-6px;">This creates a new package on the patient's record, using the Session Cost below as the package price. If an appointment is linked above, its first session is deducted automatically.</div>
         </div>
@@ -4252,6 +4315,21 @@ function openInvoiceModal(invoice, prefill){
   }
   applyInvType();
 
+  // New package's per-session cost auto-fills from Package price (the
+  // Session Cost field, relabeled above) divided by Total sessions —
+  // same suggest-but-editable pattern as the Balance field, stops
+  // auto-updating the moment someone types into it directly.
+  let pkgPerSessionManuallyEdited = false;
+  function updatePkgPerSessionSuggestion(){
+    if(pkgPerSessionManuallyEdited || invType!=='package') return;
+    const price = Number(document.getElementById('iv-sessioncost').value)||0;
+    const sessions = Number(document.getElementById('iv-pkg-sessions').value)||0;
+    document.getElementById('iv-pkg-persession').value = sessions>0 ? Math.round(price/sessions) : '';
+  }
+  document.getElementById('iv-sessioncost').addEventListener('input', updatePkgPerSessionSuggestion);
+  document.getElementById('iv-pkg-sessions').addEventListener('input', updatePkgPerSessionSuggestion);
+  document.getElementById('iv-pkg-persession').addEventListener('input', ()=>{ pkgPerSessionManuallyEdited = true; });
+
   function refreshApptAndPkgFields(patientId, preApptId, prePkgId){
     const pat = DATA.patients.find(p=>p.id===patientId);
     const apptSel = document.getElementById('iv-appt');
@@ -4314,7 +4392,8 @@ function openInvoiceModal(invoice, prefill){
       if(foundPkg){
         const total = Number(foundPkg.totalSessions)||0;
         const used = Number(foundPkg.usedSessions)||0;
-        pkgLine = 'Package "'+foundPkg.label+'": '+used+' of '+total+' sessions used — '+(total-used)+' remaining';
+        const pkgBal = packageBalance(foundPkg);
+        pkgLine = 'Package "'+foundPkg.label+'": '+used+' of '+total+' sessions used — '+(total-used)+' remaining'+(pkgBal>0? ' — '+fmtINR(pkgBal)+' balance on package' : '');
       }
     }
     if(comp){
@@ -4401,12 +4480,16 @@ function openInvoiceModal(invoice, prefill){
       const pkgName = document.getElementById('iv-pkg-name').value.trim();
       const pkgSessions = Number(document.getElementById('iv-pkg-sessions').value)||0;
       if(!pkgName || pkgSessions<=0){ alert('Please enter a package name and a total number of sessions.'); return; }
+      const pkgPerSessionRaw = document.getElementById('iv-pkg-persession').value;
       const pat = DATA.patients.find(p=>p.id===patientId);
       if(pat){
         const newPkg = {
           id: uid('pkg'), label: pkgName, totalSessions: pkgSessions, usedSessions: 0,
           purchaseDate: document.getElementById('iv-date').value || todayStr(),
-          price: costVal, notes: document.getElementById('iv-pkg-notes').value.trim()
+          price: costVal,
+          perSessionCost: pkgPerSessionRaw!=='' ? Number(pkgPerSessionRaw) : (pkgSessions>0 ? Math.round(costVal/pkgSessions) : null),
+          balanceOverride: null,
+          notes: document.getElementById('iv-pkg-notes').value.trim()
         };
         // If this invoice is for a specific appointment, treat that as the
         // package's first session — deduct it and link the two records.
