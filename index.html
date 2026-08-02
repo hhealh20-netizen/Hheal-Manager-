@@ -987,15 +987,26 @@ async function loadData(){
   }catch(e){ /* first run — nothing saved yet */ }
 }
 let saveTimer=null;
+let syncPushTimer=null;
 let saveFailCount=0;
 let changeCounter=0;
 function saveData(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     attemptSave(0);
-    if(DATA.settings.syncUrl) syncPush();
     handleChangeCountExport();
   }, 400);
+  // Sync push is debounced separately, and longer, than the local save.
+  // Local storage should reflect every change almost immediately (cheap,
+  // safe). Pushing to the Sheet is expensive at this data volume (8000+
+  // appointments, 2000+ invoices rewritten every time) -- batching several
+  // rapid edits into one push instead of one push per edit meaningfully
+  // cuts how often that slow operation actually runs, without ever risking
+  // data: local storage is already safe well before this timer even fires.
+  if(DATA.settings.syncUrl){
+    clearTimeout(syncPushTimer);
+    syncPushTimer = setTimeout(()=>{ syncPush(); }, 4000);
+  }
 }
 function handleChangeCountExport(){
   const n = Number(DATA.settings.autoExportEveryNChanges) || 0;
@@ -3180,18 +3191,29 @@ async function syncPush(interactive){
     // sending that would wipe the Doctor Payouts sheet on every push —
     // omitting the key entirely (not sending an empty array) tells the
     // script "don't touch that table" instead of "clear it out".
-    const pushData = {
-      patients: DATA.patients, appointments: DATA.appointments, staff: DATA.staff,
-      apptTypes: DATA.apptTypes, daysOff: DATA.daysOff, team: DATA.team,
-      staffPayouts: DATA.staffPayouts, cashHandovers: DATA.cashHandovers,
-      invoices: DATA.invoices, expenses: DATA.expenses, refunds: DATA.refunds,
-      settings: DATA.settings
-    };
-    if(doctorPayoutsUnlocked) pushData.doctorPayouts = DATA.doctorPayouts;
-
-    const json = await callSync(url, 'push', {data: pushData});
-    if(json.ok===false) throw new Error(json.error||'Unknown error from script');
-    if(json.lastModified) DATA.settings.lastSyncStamp = json.lastModified;
+    //
+    // Sent in the same four parts the pull already uses, one request at a
+    // time rather than one giant push — at this data volume (8000+
+    // appointments, 2000+ invoices), a single request covering everything
+    // is slow enough to noticeably delay every single edit. Splitting it
+    // doesn't reduce the total data sent, but each individual request stays
+    // small and fast, and the status line can show real progress instead of
+    // one long, silent wait.
+    const pushParts = [
+      {part:'core', data:{staff:DATA.staff, apptTypes:DATA.apptTypes, daysOff:DATA.daysOff, team:DATA.team, settings:DATA.settings, patients:DATA.patients}},
+      {part:'appointments', data:{appointments:DATA.appointments}},
+      {part:'invoices', data:{invoices:DATA.invoices}},
+      {part:'finance', data:Object.assign({staffPayouts:DATA.staffPayouts, cashHandovers:DATA.cashHandovers, expenses:DATA.expenses, refunds:DATA.refunds}, doctorPayoutsUnlocked ? {doctorPayouts:DATA.doctorPayouts} : {})}
+    ];
+    let lastModifiedSeen = '';
+    for(let i=0;i<pushParts.length;i++){
+      const {part, data} = pushParts[i];
+      setSyncStatus('Syncing '+part+'… ('+(i+1)+'/'+pushParts.length+')');
+      const json = await callSync(url, 'push', {part, data});
+      if(json.ok===false) throw new Error((json.error||'Unknown error from script')+' (while pushing '+part+')');
+      if(json.lastModified) lastModifiedSeen = json.lastModified;
+    }
+    if(lastModifiedSeen) DATA.settings.lastSyncStamp = lastModifiedSeen;
     setSyncStatus('Synced with Google Sheet ✓ ('+new Date().toLocaleTimeString()+')');
   }catch(e){
     console.error('sync push failed', e);
