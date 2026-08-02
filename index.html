@@ -2745,6 +2745,16 @@ function importFromExcel(file){
     try{
       const wb = XLSX.read(e.target.result, {type:'array'});
       const sheet = (name)=> wb.SheetNames.includes(name) ? XLSX.utils.sheet_to_json(wb.Sheets[name], {defval:''}) : [];
+      // Recognizes a file either way: the app's own human-readable Excel
+      // export ("Patient ID", "Doctor Name", ...) or a raw download
+      // straight from the Google Sheet, which uses the sync system's
+      // internal field names instead ("patientId", "name", ...). Tries
+      // each possible column name in order and returns the first that's
+      // actually present in this row, so either file format just works.
+      function pick(r, ...keys){
+        for(const k of keys){ if(r[k]!==undefined && r[k]!=='') return r[k]; }
+        return '';
+      }
 
       const patientsIn = sheet('Patients');
       const staffIn = sheet('Staff');
@@ -2766,12 +2776,12 @@ function importFromExcel(file){
       }
 
       const newStaff = staffIn.length ? staffIn.map(r=>({
-        id: String(r['Staff ID']||uid('s')), name: r['Doctor Name']||'Doctor', color: r['Color']||'#0B6E71',
-        phone: String(r['Phone']||''), email: r['Email']||'', address: r['Address']||'', qualification: r['Qualification']||'',
-        dob: excelDateToStr(r['DOB'])||'', dateJoined: excelDateToStr(r['Date Joined'])||'', dateResigned: excelDateToStr(r['Date Resigned'])||'',
-        emergencyName: r['Emergency Contact Name']||'', emergencyPhone: String(r['Emergency Contact Phone']||'')
+        id: String(pick(r,'Staff ID','id')||uid('s')), name: pick(r,'Doctor Name','name')||'Doctor', color: pick(r,'Color','color')||'#0B6E71',
+        phone: String(pick(r,'Phone','phone')||''), email: pick(r,'Email','email')||'', address: pick(r,'Address','address')||'', qualification: pick(r,'Qualification','qualification')||'',
+        dob: excelDateToStr(pick(r,'DOB','dob'))||'', dateJoined: excelDateToStr(pick(r,'Date Joined','dateJoined'))||'', dateResigned: excelDateToStr(pick(r,'Date Resigned','dateResigned'))||'',
+        emergencyName: pick(r,'Emergency Contact Name','emergencyName')||'', emergencyPhone: String(pick(r,'Emergency Contact Phone','emergencyPhone')||'')
       })) : DATA.staff;
-      const newTypes = typesIn.length ? typesIn.map(r=>({id: String(r['Type ID']||uid('t')), name: r['Type Name']||'Type', color: r['Color']||'#0B6E71'})) : DATA.apptTypes;
+      const newTypes = typesIn.length ? typesIn.map(r=>({id: String(pick(r,'Type ID','id')||uid('t')), name: pick(r,'Type Name','name')||'Type', color: pick(r,'Color','color')||'#0B6E71'})) : DATA.apptTypes;
       // Some rows (usually older entries) have Age/DOB/Start Date packed
       // into the Notes column instead of their own columns — e.g. "Age: 19
       // | Started: 2024-08-08 | DOB: 2005-10-20". Newer rows already have
@@ -2795,13 +2805,13 @@ function importFromExcel(file){
         return {fields, rest};
       }
       const newPatients = patientsIn.length ? patientsIn.map(r=>{
-        const packed = extractPackedNotes(r['Notes']);
+        const packed = extractPackedNotes(pick(r,'Notes','notes'));
         return {
-        id: String(r['Patient ID']||uid('pat')), code: String(r['Patient Code']||''), name: r['Name']||'Unnamed', phone:String(r['Phone']||''),
-        email:r['Email']||'', age: r['Age']||packed.fields.age||'', dob: excelDateToStr(r['DOB'])||packed.fields.dob||'', gender: r['Gender']||'', bloodGroup: r['Blood Group']||'',
-        address:r['Address']||'', emergencyName: r['Emergency Contact Name']||'', emergencyPhone: r['Emergency Contact Phone']||'',
-        startDate: excelDateToStr(r['Start Date'])||packed.fields.startDate||'', referredBy: r['Referred By']||packed.fields.referredBy||'', type:r['Type']||'Walk-In',
-        diagnosis: r['Diagnosis']||'', notes: packed.rest, archived: String(r['Archived']||'').toLowerCase()==='yes',
+        id: String(pick(r,'Patient ID','id')||uid('pat')), code: String(pick(r,'Patient Code','code')||''), name: pick(r,'Name','name')||'Unnamed', phone:String(pick(r,'Phone','phone')||''),
+        email:pick(r,'Email','email')||'', age: pick(r,'Age','age')||packed.fields.age||'', dob: excelDateToStr(pick(r,'DOB','dob'))||packed.fields.dob||'', gender: pick(r,'Gender','gender')||'', bloodGroup: pick(r,'Blood Group','bloodGroup')||'',
+        address:pick(r,'Address','address')||'', emergencyName: pick(r,'Emergency Contact Name','emergencyName')||'', emergencyPhone: pick(r,'Emergency Contact Phone','emergencyPhone')||'',
+        startDate: excelDateToStr(pick(r,'Start Date','startDate'))||packed.fields.startDate||'', referredBy: pick(r,'Referred By','referredBy')||packed.fields.referredBy||'', type:pick(r,'Type','type')||'Walk-In',
+        diagnosis: pick(r,'Diagnosis','diagnosis')||'', notes: packed.rest, archived: String(pick(r,'Archived','archived')||'').toLowerCase()==='yes'||pick(r,'Archived','archived')===true,
         packages: []
       };}) : DATA.patients;
 
@@ -2840,40 +2850,46 @@ function importFromExcel(file){
       if(packagesIn.length){
         const pByPatientId = Object.fromEntries(newPatients.map(p=>[p.id,p]));
         packagesIn.forEach(r=>{
-          let pat = pByPatientId[String(r['Patient ID']||'')];
-          if(!pat && r['Patient']){
-            const pid = resolvePatientId(null, r['Patient']);
+          let pat = pByPatientId[String(pick(r,'Patient ID','patientId')||'')];
+          if(!pat && pick(r,'Patient','patientName')){
+            const pid = resolvePatientId(null, pick(r,'Patient','patientName'));
             if(pid) pat = pByPatientId[pid];
           }
           if(!pat){ unmatchedPackages++; return; }
           pat.packages = pat.packages || [];
+          const perSessionRaw = pick(r,'Per Session Cost','perSessionCost');
+          const overrideRaw = pick(r,'Balance Override','balanceOverride');
           pat.packages.push({
-            id: String(r['Package ID']||uid('pkg')), label: r['Package Name']||'Package',
-            totalSessions: Number(r['Total Sessions'])||0, usedSessions: Number(r['Used Sessions'])||0,
-            purchaseDate: excelDateToStr(r['Purchase Date'])||'', price: r['Price']||'',
-            perSessionCost: (r['Per Session Cost']!==undefined && r['Per Session Cost']!=='') ? Number(r['Per Session Cost']) : null,
-            balanceOverride: (r['Balance Override']!==undefined && r['Balance Override']!=='') ? Number(r['Balance Override']) : null,
-            notes: r['Notes']||''
+            id: String(pick(r,'Package ID','id')||uid('pkg')), label: pick(r,'Package Name','label')||'Package',
+            totalSessions: Number(pick(r,'Total Sessions','totalSessions'))||0, usedSessions: Number(pick(r,'Used Sessions','usedSessions'))||0,
+            purchaseDate: excelDateToStr(pick(r,'Purchase Date','purchaseDate'))||'', price: pick(r,'Price','price')||'',
+            perSessionCost: perSessionRaw!=='' ? Number(perSessionRaw) : null,
+            balanceOverride: overrideRaw!=='' ? Number(overrideRaw) : null,
+            notes: pick(r,'Notes','notes')||''
           });
         });
       }
 
       const newAppts = apptIn.length ? apptIn.map(r=>{
-        const patientId = resolvePatientId(r['Patient ID'], r['Patient']);
-        let dateVal = excelDateToStr(r['Date']);
-        const timeVal = normalizeTimeStr(r['Start Time'], '09:00');
+        const patientId = resolvePatientId(pick(r,'Patient ID','patientId'), pick(r,'Patient','patientName'));
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
+        const timeVal = normalizeTimeStr(pick(r,'Start Time','startTime'), '09:00');
+        const staffId = r['staffId'] || staffByName[pick(r,'Doctor','doctorName')] || (newStaff[0] && newStaff[0].id);
+        const typeId = r['typeId'] || typeByName[pick(r,'Type','typeName')] || (newTypes[0] && newTypes[0].id);
+        const statusRaw = pick(r,'Status','status');
+        const confirmedRaw = pick(r,'Confirmed','confirmed');
         return {
-          id: String(r['Appt. ID']||uid('appt')),
+          id: String(pick(r,'Appt. ID','id')||uid('appt')),
           patientId: patientId || '',
-          patientName: patientId ? null : (r['Patient']||''),
-          staffId: staffByName[r['Doctor']] || (newStaff[0] && newStaff[0].id),
-          typeId: typeByName[r['Type']] || (newTypes[0] && newTypes[0].id),
+          patientName: patientId ? null : (pick(r,'Patient','patientName')||''),
+          staffId: staffId,
+          typeId: typeId,
           date: String(dateVal||'').slice(0,10),
           startTime: timeVal,
-          duration: Number(r['Duration (min)'])||30,
-          status: ['Scheduled','Completed','Cancelled'].includes(r['Status']) ? r['Status'] : 'Scheduled',
-          confirmed: r['Confirmed'] === 'No' ? false : true,
-          reason: r['Reason']||''
+          duration: Number(pick(r,'Duration (min)','duration'))||30,
+          status: ['Scheduled','Completed','Cancelled'].includes(statusRaw) ? statusRaw : 'Scheduled',
+          confirmed: (confirmedRaw==='No' || confirmedRaw===false || confirmedRaw==='false') ? false : true,
+          reason: pick(r,'Reason','reason')||''
         };
       }).filter(a=>a.date) : DATA.appointments;
       const unmatchedAppts = apptIn.length ? newAppts.filter(a=>!a.patientId) : [];
@@ -2883,18 +2899,19 @@ function importFromExcel(file){
         (p.packages||[]).forEach(pk=>{ pkgByPatientAndLabel[p.id+'||'+pk.label] = pk.id; });
       });
       const newInvoices = invoicesIn.length ? invoicesIn.map(r=>{
-        const patientId = resolvePatientId(r['Patient ID'], r['Patient']);
-        let dateVal = excelDateToStr(r['Date']);
-        const pkgLabel = r['Package Used']||'';
-        const isComp = String(r['Complimentary']||'').toLowerCase()==='yes';
+        const patientId = r['patientId'] ? String(r['patientId']) : resolvePatientId(pick(r,'Patient ID'), pick(r,'Patient'));
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
+        const pkgLabel = pick(r,'Package Used')||'';
+        const compRaw = pick(r,'Complimentary','complimentary');
+        const isComp = compRaw===true || compRaw==='true' || String(compRaw||'').toLowerCase()==='yes';
         // 'Amount Taken' is the current column name; 'Amount' is kept as a
         // fallback so a file exported before this field was renamed still imports.
-        const amountTaken = Number(r['Amount Taken'] ?? r['Amount'] ?? 0) || 0;
-        const sessionCost = Number(r['Session Cost'] ?? amountTaken) || 0;
+        const amountTaken = Number(pick(r,'Amount Taken','amount') ?? r['Amount'] ?? 0) || 0;
+        const sessionCost = Number(pick(r,'Session Cost','sessionCost') ?? amountTaken) || 0;
         // 'Payment Method' is the current column; older exports had separate
         // 'Cash'/'UPI' columns instead, so infer a method from whichever of
         // those is present when 'Payment Method' itself isn't in the file.
-        let method = r['Payment Method'] || null;
+        let method = pick(r,'Payment Method','paymentMethod') || null;
         if(!method){
           const legacyUpi = Number(r['UPI'])||0;
           method = legacyUpi>0 ? 'UPI' : 'Cash';
@@ -2905,7 +2922,7 @@ function importFromExcel(file){
         // legacy Cash/UPI/Amount Received value shows anything was collected.
         // Tolerant of case/spacing and the common 'Complimentory' misspelling,
         // so a typo in this column doesn't silently drop real collected money.
-        const rawStatus = String(r['Status']||'').trim();
+        const rawStatus = String(pick(r,'Status','status')||'').trim();
         const STATUS_ALIASES = { 'complimentory': 'Complimentary' };
         const canonicalStatus = INVOICE_STATUSES.find(s=>s.toLowerCase()===rawStatus.toLowerCase())
           || STATUS_ALIASES[rawStatus.toLowerCase()] || null;
@@ -2915,52 +2932,52 @@ function importFromExcel(file){
           status = isComp ? 'Complimentary' : (legacyReceived>0 ? 'Paid' : 'Pending');
         }
         return {
-          id: String(r['Invoice ID']||uid('inv')),
+          id: String(pick(r,'Invoice ID','id')||uid('inv')),
           date: String(dateVal||'').slice(0,10),
           patientId: patientId || '',
-          patientName: patientId ? null : (r['Patient']||''),
-          apptId: r['Appt. ID'] ? String(r['Appt. ID']) : null,
-          packageId: (patientId && pkgLabel) ? (pkgByPatientAndLabel[patientId+'||'+pkgLabel] || null) : null,
-          staffId: staffByName[r['Doctor']] || null,
-          typeId: typeByName[r['Session Type']] || null,
+          patientName: patientId ? null : (pick(r,'Patient','patientName')||''),
+          apptId: pick(r,'Appt. ID','apptId') ? String(pick(r,'Appt. ID','apptId')) : null,
+          packageId: r['packageId'] ? String(r['packageId']) : ((patientId && pkgLabel) ? (pkgByPatientAndLabel[patientId+'||'+pkgLabel] || null) : null),
+          staffId: r['staffId'] ? String(r['staffId']) : (staffByName[pick(r,'Doctor')] || null),
+          typeId: r['typeId'] ? String(r['typeId']) : (typeByName[pick(r,'Session Type')] || null),
           sessionCost: sessionCost, complimentary: isComp,
-          amount: Number(r['Amount Received'] ?? amountTaken) || amountTaken,
-          rawBalance: Number(r['Balance']) || 0,
+          amount: Number(pick(r,'Amount Received','amount') ?? amountTaken) || amountTaken,
+          rawBalance: Number(pick(r,'Balance','rawBalance')) || 0,
           paymentMethod: isComp ? null : method,
           status: status,
-          receiptNo: r['Receipt No']||'', notes: r['Notes']||''
+          receiptNo: pick(r,'Receipt No','receiptNo')||'', notes: pick(r,'Notes','notes')||''
         };
       }) : DATA.invoices;
       const unmatchedInvoices = invoicesIn.length ? newInvoices.filter(inv=>!inv.patientId) : [];
 
       const newExpenses = expensesIn.length ? expensesIn.map(r=>{
-        let dateVal = excelDateToStr(r['Date']);
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
         return {
-          id: String(r['Expense ID']||uid('exp')),
+          id: String(pick(r,'Expense ID','id')||uid('exp')),
           date: String(dateVal||'').slice(0,10),
-          head: r['Head'] || Object.keys(EXPENSE_CATEGORIES)[0],
-          subHead: r['Sub Head']||'', paidTo: r['Paid To']||'',
-          cash: Number(r['Cash'])||0, upi: Number(r['UPI'])||0, notes: r['Notes']||''
+          head: pick(r,'Head','head') || Object.keys(EXPENSE_CATEGORIES)[0],
+          subHead: pick(r,'Sub Head','subHead')||'', paidTo: pick(r,'Paid To','paidTo')||'',
+          cash: Number(pick(r,'Cash','cash'))||0, upi: Number(pick(r,'UPI','upi'))||0, notes: pick(r,'Notes','notes')||''
         };
       }) : DATA.expenses;
 
       const newRefunds = refundsIn.length ? refundsIn.map(r=>{
-        let dateVal = excelDateToStr(r['Date']);
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
         return {
-          id: String(r['Refund ID']||uid('ref')),
-          invoiceId: String(r['Invoice ID']||''),
-          patientId: resolvePatientId(null, r['Patient']) || '',
+          id: String(pick(r,'Refund ID','id')||uid('ref')),
+          invoiceId: String(pick(r,'Invoice ID','invoiceId')||''),
+          patientId: r['patientId'] ? String(r['patientId']) : (resolvePatientId(null, pick(r,'Patient','patientId')) || ''),
           date: String(dateVal||'').slice(0,10),
-          amount: Number(r['Amount'])||0, reason: r['Reason']||'', mode: r['Payment Mode']||'Cash',
-          notes: r['Notes']||''
+          amount: Number(pick(r,'Amount','amount'))||0, reason: pick(r,'Reason','reason')||'', mode: pick(r,'Payment Mode','mode')||'Cash',
+          notes: pick(r,'Notes','notes')||''
         };
       }).filter(rf=>rf.invoiceId) : DATA.refunds;
 
       const newTeam = teamIn.length ? teamIn.map(r=>({
-        id: String(r['Team Member ID']||uid('team')), name: r['Name']||'Unnamed', role: r['Role']||'Reception',
-        phone: String(r['Phone']||''), email: r['Email']||'', address: r['Address']||'', qualification: r['Qualification']||'',
-        dob: excelDateToStr(r['DOB'])||'', dateJoined: excelDateToStr(r['Date Joined'])||'', dateResigned: excelDateToStr(r['Date Resigned'])||'',
-        emergencyName: r['Emergency Contact Name']||'', emergencyPhone: String(r['Emergency Contact Phone']||'')
+        id: String(pick(r,'Team Member ID','id')||uid('team')), name: pick(r,'Name','name')||'Unnamed', role: pick(r,'Role','role')||'Reception',
+        phone: String(pick(r,'Phone','phone')||''), email: pick(r,'Email','email')||'', address: pick(r,'Address','address')||'', qualification: pick(r,'Qualification','qualification')||'',
+        dob: excelDateToStr(pick(r,'DOB','dob'))||'', dateJoined: excelDateToStr(pick(r,'Date Joined','dateJoined'))||'', dateResigned: excelDateToStr(pick(r,'Date Resigned','dateResigned'))||'',
+        emergencyName: pick(r,'Emergency Contact Name','emergencyName')||'', emergencyPhone: String(pick(r,'Emergency Contact Phone','emergencyPhone')||'')
       })) : DATA.team;
 
       const resolveTeamId = (idVal, nameVal)=>{
@@ -2970,27 +2987,27 @@ function importFromExcel(file){
         return match ? match.id : null;
       };
       const newStaffPayouts = staffPayoutsIn.length ? staffPayoutsIn.map(r=>{
-        let dateVal = excelDateToStr(r['Date']);
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
         return {
-          id: String(r['Payout ID']||uid('pay')),
-          personId: resolveTeamId(r['Person ID'], r['Person']) || '',
-          type: r['Type']||'Advance', amount: Number(r['Amount'])||0, mode: r['Mode']||'Cash',
-          date: String(dateVal||'').slice(0,10), settled: String(r['Settled']||'').toLowerCase()==='yes', notes: r['Notes']||''
+          id: String(pick(r,'Payout ID','id')||uid('pay')),
+          personId: (r['personId'] ? resolveTeamId(r['personId'], null) : resolveTeamId(pick(r,'Person ID'), pick(r,'Person'))) || '',
+          type: pick(r,'Type','type')||'Advance', amount: Number(pick(r,'Amount','amount'))||0, mode: pick(r,'Mode','mode')||'Cash',
+          date: String(dateVal||'').slice(0,10), settled: String(pick(r,'Settled','settled')||'').toLowerCase()==='yes'||pick(r,'Settled','settled')===true, notes: pick(r,'Notes','notes')||''
         };
       }).filter(p=>p.personId) : DATA.staffPayouts;
 
       const newCashHandovers = cashHandoversIn.length ? cashHandoversIn.map(r=>{
-        let dateVal = excelDateToStr(r['Date']);
-        return { id: String(r['Handover ID']||uid('cash')), date: String(dateVal||'').slice(0,10), amount: Number(r['Amount'])||0, notes: r['Notes']||'' };
+        let dateVal = excelDateToStr(pick(r,'Date','date'));
+        return { id: String(pick(r,'Handover ID','id')||uid('cash')), date: String(dateVal||'').slice(0,10), amount: Number(pick(r,'Amount','amount'))||0, notes: pick(r,'Notes','notes')||'' };
       }) : DATA.cashHandovers;
 
       if(settingsIn.length){
-        const get = (k)=>{ const row = settingsIn.find(r=>r['Setting']===k); return row? row['Value']: undefined; };
-        DATA.settings.clinicName = get('Clinic Name') ?? DATA.settings.clinicName;
-        DATA.settings.startTime = normalizeTimeStr(get('Day Start Time'), DATA.settings.startTime);
-        DATA.settings.endTime = normalizeTimeStr(get('Day End Time'), DATA.settings.endTime);
-        DATA.settings.interval = Number(get('Slot Interval (min)') ?? DATA.settings.interval);
-        DATA.settings.defaultDuration = Number(get('Default Duration (min)') ?? DATA.settings.defaultDuration);
+        const get = (k)=>{ const row = settingsIn.find(r=>r['Setting']===k || r['key']===k); return row? (row['Value']!==undefined?row['Value']:row['value']) : undefined; };
+        DATA.settings.clinicName = get('Clinic Name') ?? get('clinicName') ?? DATA.settings.clinicName;
+        DATA.settings.startTime = normalizeTimeStr(get('Day Start Time') ?? get('startTime'), DATA.settings.startTime);
+        DATA.settings.endTime = normalizeTimeStr(get('Day End Time') ?? get('endTime'), DATA.settings.endTime);
+        DATA.settings.interval = Number((get('Slot Interval (min)') ?? get('interval')) ?? DATA.settings.interval);
+        DATA.settings.defaultDuration = Number((get('Default Duration (min)') ?? get('defaultDuration')) ?? DATA.settings.defaultDuration);
       }
       // Guard against importing a file that already contains duplicate
       // Patient IDs or Appointment IDs (e.g. a previously-corrupted export).
