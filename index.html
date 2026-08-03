@@ -4536,7 +4536,7 @@ function openInvoiceModal(invoice, prefill){
         // package's first session — deduct it and link the two records.
         if(apptId){
           const appt = DATA.appointments.find(a=>a.id===apptId);
-          if(appt){ appt.packageId = newPkg.id; appt.packageDeducted = true; newPkg.usedSessions = 1; }
+          if(appt){ appt.packageId = newPkg.id; appt.packageDeducted = true; appt.status = 'Completed'; newPkg.usedSessions = 1; }
         }
         pat.packages = pat.packages || [];
         pat.packages.push(newPkg);
@@ -4565,8 +4565,24 @@ function openInvoiceModal(invoice, prefill){
       if(invoiceIdExists(rec.id)){ rec.id = nextInvoiceId(); }
       DATA.invoices.push(rec);
     }
+    // Billing a package-linked session is, in practice, how staff record
+    // that it happened — they don't separately go mark the appointment
+    // Completed. Since that's the one thing that actually deducts a
+    // session, billing needs to trigger it here too, matching the real
+    // workflow, rather than silently never deducting anything. Guarded by
+    // packageDeducted so re-saving the same invoice never double-deducts.
+    if(rec.apptId && rec.packageId){
+      const linkedAppt = DATA.appointments.find(a=>a.id===rec.apptId);
+      if(linkedAppt && !linkedAppt.packageDeducted){
+        linkedAppt.status = 'Completed';
+        linkedAppt.packageId = rec.packageId;
+        adjustPackageUsage(patientId, rec.packageId, 1);
+        linkedAppt.packageDeducted = true;
+      }
+    }
     saveData(); closeModal(); renderBilling();
     if(document.getElementById('view-patients').style.display!=='none') renderPatientDetail();
+    if(document.getElementById('view-schedule').style.display!=='none') renderSchedule();
     showToast(invoice ? 'Invoice updated' : (invType==='package' && !isComp ? 'Invoice saved — package created on patient record' : 'Invoice saved'));
   };
 }
